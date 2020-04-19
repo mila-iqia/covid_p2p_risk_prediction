@@ -64,7 +64,10 @@ class ContactDataset(Dataset):
                 -> `health_history`: 14-day health history of self of shape (14, 13)
                         with channels `reported_symptoms` (12), `test_results`(1).
                 -> `history_days`: time-stamps to go with the health_history.
-                -> `current_compartment`: current epidemic compartment (S/E/I/R) of shape (4,).
+                -> `current_compartment`: current epidemic compartment (S/E/I/R)
+                    of shape (4,).
+                -> `infectiousness_history`: 14-day history of infectiousness,
+                    of shape (14, 1).
                 -> `encounter_health`: health during encounter, of shape (M, 13)
                 -> `encounter_message`: risk transmitted during encounter, of shape (M, 8).
                         These are the 8 bits of info that can be sent between users.
@@ -113,6 +116,7 @@ class ContactDataset(Dataset):
             ],
             axis=1,
         )
+        infectiousness_history = human_day_info["unobserved"]["infectiousness"][:, None]
         history_days = np.clip(np.arange(day_idx - 13, day_idx + 1), 0, None)[:, None]
         hdi_to_health_at_encounter = lambda hdi: np.concatenate(
             [
@@ -147,6 +151,7 @@ class ContactDataset(Dataset):
         # This should be it
         return Dict(
             health_history=torch.from_numpy(health_history).float(),
+            infectiousness_history=torch.from_numpy(infectiousness_history).float(),
             history_days=torch.from_numpy(history_days).float(),
             current_compartment=torch.from_numpy(current_compartment).float(),
             encounter_health=torch.from_numpy(health_at_encounter).float(),
