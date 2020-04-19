@@ -1,3 +1,4 @@
+from typing import Union
 from addict import Dict
 
 import torch
@@ -22,7 +23,7 @@ class _ContactTracingTransformer(nn.Module):
         partner_id_embedding: nn.Module,
         message_embedding: nn.Module,
         self_attention_blocks: nn.ModuleList,
-        self_latent_variable_pooler: nn.Module,
+        self_latent_variable_pooler: Union[nn.Module, None],
         latent_variable_mlp: nn.Module,
         encounter_logit_sink_pooler: nn.Module,
         logit_sink_mlp: nn.Module,
@@ -142,12 +143,17 @@ class _ContactTracingTransformer(nn.Module):
             entities = torch.cat([meta_data, entities], dim=2)
         # -------- Entity Pooling --------
         # -------- Latent Variables
-        # Pool the self entities together to predict one latent variable
-        pre_latent_variable = self.self_latent_variable_pooler(entities)
-        assert pre_latent_variable.shape[1] == 1
-        pre_latent_variable = pre_latent_variable.reshape(
-            batch_size, pre_latent_variable.shape[2]
-        )
+        # Pool the self entities together to predict one latent variable (if required)
+        if self.self_latent_variable_pooler is not None:
+            pre_latent_variable = self.self_latent_variable_pooler(
+                entities[:, num_encounters:]
+            )
+            assert pre_latent_variable.shape[1] == 1
+            pre_latent_variable = pre_latent_variable.reshape(
+                batch_size, pre_latent_variable.shape[2]
+            )
+        else:
+            pre_latent_variable = entities[:, num_encounters:]
         # Push through the latent variable MLP to get the latent variables
         # latent_variable.shape = BC
         latent_variable = self.latent_variable_mlp(pre_latent_variable)
@@ -187,6 +193,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         num_heads=4,
         sab_capacity=128,
         num_sabs=2,
+        pool_latent_entities=True,
         # Output
         encounter_output_features=1,
         latent_variable_output_features=10,
@@ -232,9 +239,12 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             )
         self_attention_blocks = nn.ModuleList(self_attention_blocks)
         # Build the entity poolers
-        self_latent_variable_pooler = attn.PMA(
-            dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
-        )
+        if pool_latent_entities:
+            self_latent_variable_pooler = attn.PMA(
+                dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
+            )
+        else:
+            self_latent_variable_pooler = None
         encounter_logit_sink_pooler = attn.PMA(
             dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
         )
@@ -288,5 +298,6 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=5, collate_fn=ContactDataset.collate_fn)
     batch = next(iter(dataloader))
 
-    ctt = ContactTracingTransformer()
+    ctt = ContactTracingTransformer(pool_latent_entities=False)
     output = ctt(batch)
+    pass
