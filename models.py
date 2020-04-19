@@ -25,8 +25,8 @@ class _ContactTracingTransformer(nn.Module):
         self_attention_blocks: nn.ModuleList,
         self_latent_variable_pooler: Union[nn.Module, None],
         latent_variable_mlp: nn.Module,
-        encounter_logit_sink_pooler: nn.Module,
-        logit_sink_mlp: nn.Module,
+        encounter_logit_sink_pooler: Union[nn.Module, None],
+        logit_sink_mlp: Union[nn.Module, None],
         encounter_mlp: nn.Module,
         entity_masker: nn.Module,
         message_placeholder: nn.Parameter,
@@ -158,10 +158,19 @@ class _ContactTracingTransformer(nn.Module):
         # latent_variable.shape = BC
         latent_variable = self.latent_variable_mlp(pre_latent_variable)
         # -------- Logit sink
-        pre_logit_sink = self.encounter_logit_sink_pooler(entities)
-        assert pre_logit_sink.shape[1] == 1
-        # logit_sink.shape = B1C
-        logit_sink = self.logit_sink_mlp(pre_logit_sink)
+        if self.encounter_logit_sink_pooler is not None:
+            pre_logit_sink = self.encounter_logit_sink_pooler(entities)
+            assert pre_logit_sink.shape[1] == 1
+            # logit_sink.shape = B1C
+            assert self.logit_sink_mlp is not None
+            logit_sink = self.logit_sink_mlp(pre_logit_sink)
+        else:
+            assert self.logit_sink_mlp is None
+            logit_sink = torch.zeros(
+                (batch_size, 0, entities.shape[2] - meta_data_dim),
+                dtype=entities.dtype,
+                device=entities.device,
+            )
         # -------- Generate Output Variables --------
         # Process encounters to their variables
         pre_encounter_variables = torch.cat(
@@ -193,10 +202,12 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         num_heads=4,
         sab_capacity=128,
         num_sabs=2,
-        pool_latent_entities=True,
+        # Meta config
+        pool_latent_entities=False,
+        use_logit_sink=False,
         # Output
         encounter_output_features=1,
-        latent_variable_output_features=10,
+        latent_variable_output_features=1,
     ):
         # ------- Embeddings -------
         health_embedding = mods.HealthEmbedding(
@@ -245,12 +256,18 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             )
         else:
             self_latent_variable_pooler = None
-        encounter_logit_sink_pooler = attn.PMA(
-            dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
-        )
+        if use_logit_sink:
+            encounter_logit_sink_pooler = attn.PMA(
+                dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
+            )
+        else:
+            encounter_logit_sink_pooler = None
         # ------- Output processors -------
         # Encounter
-        logit_sink_mlp = nn.Linear(sab_capacity + sab_metadata_dim, sab_capacity)
+        if use_logit_sink:
+            logit_sink_mlp = nn.Linear(sab_capacity + sab_metadata_dim, sab_capacity)
+        else:
+            logit_sink_mlp = None
         encounter_mlp = nn.Sequential(
             nn.Linear(sab_capacity, capacity),
             nn.ReLU(),
@@ -289,7 +306,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         )
 
 
-if __name__ == "__main__":
+def _test_ctt():
     from loader import ContactDataset
     from torch.utils.data import DataLoader
 
@@ -298,6 +315,12 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=5, collate_fn=ContactDataset.collate_fn)
     batch = next(iter(dataloader))
 
-    ctt = ContactTracingTransformer(pool_latent_entities=False)
+    ctt = ContactTracingTransformer(pool_latent_entities=False, use_logit_sink=False)
     output = ctt(batch)
+    print(output.latent_variable.shape)
+    print(output.encounter_variables.shape)
+
+
+if __name__ == "__main__":
+    _test_ctt()
     pass
