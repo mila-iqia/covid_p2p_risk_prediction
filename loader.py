@@ -4,6 +4,7 @@ from addict import Dict
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data.dataloader import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
 
@@ -204,12 +205,21 @@ class ContactDataset(Dataset):
         return collates
 
 
-def _test_loader():
-    from torch.utils.data.dataloader import DataLoader
+def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
+    dataset = ContactDataset(**dataset_kwargs)
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        collate_fn=ContactDataset.collate_fn,
+    )
+    return dataloader
 
+
+def _test_loader():
     path = "/Users/nrahaman/Python/ctt/data/output.pkl"
-    dataset = ContactDataset(path)
-    dataloader = DataLoader(dataset, batch_size=5, collate_fn=ContactDataset.collate_fn)
+    dataloader = get_dataloader(batch_size=5, shuffle=False, num_workers=0, path=path)
     batch = next(iter(dataloader))
 
 
@@ -220,6 +230,6 @@ def _test_dataset():
 
 
 if __name__ == "__main__":
-    # _test_loader()
-    _test_dataset()
+    _test_loader()
+    # _test_dataset()
     pass
