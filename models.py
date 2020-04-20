@@ -237,9 +237,23 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         sab_metadata_dim = time_embedding_dim + encounter_partner_id_embedding_dim
         sab_intermediate_in_dim = sab_capacity + sab_metadata_dim
         # Build the SABs
-        self_attention_blocks = [
-            attn.SAB(dim_in=sab_in_dim, dim_out=sab_capacity, num_heads=num_heads)
-        ]
+        if num_sabs >= 1:
+            self_attention_blocks = [
+                attn.SAB(dim_in=sab_in_dim, dim_out=sab_capacity, num_heads=num_heads)
+            ]
+        else:
+            # This is a special code-path where we don't use any self-attention,
+            # but just a plain-old MLP (as a baseline).
+            self_attention_blocks = [
+                nn.Sequential(
+                    nn.Linear(sab_in_dim, sab_capacity),
+                    nn.ReLU(),
+                    nn.Linear(sab_capacity, sab_capacity),
+                    nn.ReLU(),
+                    nn.Linear(sab_capacity, sab_capacity),
+                    nn.ReLU(),
+                )
+            ]
         for sab_idx in range(num_sabs - 1):
             self_attention_blocks.append(
                 attn.SAB(

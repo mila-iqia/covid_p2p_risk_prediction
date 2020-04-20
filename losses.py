@@ -1,6 +1,17 @@
+from functools import reduce
+from addict import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+def get_class(key):
+    KEY_CLASS_MAPPING = {
+        "infectiousness": InfectiousnessLoss,
+        "contagion": ContagionLoss,
+    }
+    return KEY_CLASS_MAPPING[key]
 
 
 class InfectiousnessLoss(nn.Module):
@@ -36,3 +47,38 @@ class ContagionLoss(nn.Module):
         else:
             # TODO
             raise NotImplementedError
+
+
+class WeightedSum(nn.Module):
+    def __init__(self, losses: dict, weights: dict = None):
+        super(WeightedSum, self).__init__()
+        self.losses = nn.ModuleDict(losses)
+        if weights is None:
+            # noinspection PyUnresolvedReferences
+            weights = {key: 1.0 for key in self.losses.keys()}
+        self.weights = weights
+        # noinspection PyTypeChecker
+        assert len(self.losses) == len(self.weights)
+
+    def forward(self, model_input, model_output):
+        # noinspection PyUnresolvedReferences
+        unweighted_losses = {
+            key: loss(model_input, model_output) for key, loss in self.losses.items()
+        }
+        weighted_losses = {
+            key: self.weights[key] * loss for key, loss in unweighted_losses.items()
+        }
+        output = Dict()
+        output.unweighted_losses = unweighted_losses
+        output.weighted_losses = weighted_losses
+        output.loss = reduce(lambda x, y: x + y, list(weighted_losses.values()))
+        return output
+
+    @classmethod
+    def from_config(cls, config):
+        losses = {}
+        weights = {}
+        for key in config["kwargs"]:
+            losses[key] = get_class(key)(**config["kwargs"][key])
+            weights[key] = config["weights"].get(key, 1.0)
+        return cls(losses=losses, weights=weights)

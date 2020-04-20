@@ -12,3 +12,9 @@ def to_device(x, device):
         return x.to(device)
     else:
         raise NotImplementedError
+
+
+def momentum_accumulator(momentum):
+    def _accumulator(old, new):
+        return momentum * old + (1 - momentum) * new
+    return _accumulator

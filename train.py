@@ -5,8 +5,8 @@ from speedrun import BaseExperiment, IOMixin, register_default_dispatch
 
 from models import ContactTracingTransformer
 from loader import get_dataloader
-from losses import ContagionLoss, InfectiousnessLoss
-from utils import to_device
+from losses import WeightedSum
+from utils import to_device, momentum_accumulator
 
 
 class CTTTrainer(IOMixin, BaseExperiment):
@@ -37,12 +37,7 @@ class CTTTrainer(IOMixin, BaseExperiment):
 
     def _build_criteria_and_optim(self):
         # noinspection PyArgumentList
-        self.infectiousness_loss: nn.Module = InfectiousnessLoss(
-            **self.get("losses/kwargs/infectiousness", {})
-        )
-        self.contagion_loss: nn.Module = ContagionLoss(
-            **self.get("losses/kwargs/contagion", {})
-        )
+        self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
         self.optim = torch.optim.Adam(
             self.model.parameters(), **self.get("optim/kwargs")
         )
@@ -60,34 +55,37 @@ class CTTTrainer(IOMixin, BaseExperiment):
             # self.validate_epoch()
 
     def train_epoch(self):
+        acm = momentum_accumulator(0.9)
+        self.clear_moving_averages()
         for model_input in self.progress(self.train_loader, tag="train"):
             # Evaluate model
             model_input = to_device(model_input, self.device)
             model_output = self.model(model_input)
             # Compute loss
-            contagion_loss = self.contagion_loss(model_input, model_output)
-            infectiousness_loss = self.infectiousness_loss(model_input, model_output)
-            loss = (
-                self.get("losses/weights/contagion", 1.0) * contagion_loss
-                + self.get("losses/weights/infectiousness", 1.0) * infectiousness_loss
-            )
+            losses = self.loss(model_input, model_output)
+            loss = losses.loss
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
             # Log to pbar
+            self.accumulate_in_cache("moving_loss", loss.item(), acm)
             self.log_progress(
-                "train",
-                loss=loss.item(),
-                closs=contagion_loss.item(),
-                iloss=infectiousness_loss.item(),
+                "train", loss=self.read_from_cache("moving_loss"),
             )
 
     def validate_epoch(self):
+        losses = []
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
                 model_output = self.model(model_input)
                 # TODO Continue
+
+    def clear_moving_averages(self):
+        return self.clear_in_cache("moving_loss")
+
+    def maintain_moving_averages(self):
+        pass
 
 
 if __name__ == "__main__":

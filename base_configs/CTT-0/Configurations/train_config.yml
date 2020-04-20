@@ -7,7 +7,7 @@ data:
   loader_kwargs:
     batch_size: 8
     shuffle: true
-    num_workers: 0
+    num_workers: 1
     relative_days: true
 
 model:
@@ -34,6 +34,9 @@ losses:
     infectiousness: {}
     contagion:
       allow_multiple_exposures: true
+  weights:
+    infectiousness: 1.
+    contagion: 1.
 
 optim:
   kwargs:
