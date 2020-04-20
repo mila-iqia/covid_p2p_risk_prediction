@@ -16,17 +16,24 @@ class ContactDataset(Dataset):
         "encounter_is_contagion",
     ]
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, relative_days=True):
         """
         Parameters
         ----------
         path : str
             Path to the pickle file.
+        relative_days : bool
+            If set to True, the time-stamps (as days) are formatted such that
+            the current day is represented as 0. Previous days are represented
+            as negative values, i.e. day = -2 means the day before yesterday.
+            If set to False, the time-stamps show the true number of days since
+            day 0 (e.g. "today" can be represented as say 15).
         """
         # Private
         self._num_id_bits = 16
         # Public
         self.path = path
+        self.relative_days = relative_days
         # Prepwork
         self._read_data()
 
@@ -148,6 +155,10 @@ class ContactDataset(Dataset):
                 current_compartment == "R",
             ]
         ).astype("float32")
+        # Normalize both days to assign 0 to present
+        if self.relative_days:
+            history_days = history_days - day_idx
+            encounter_day = encounter_day - day_idx
         # This should be it
         return Dict(
             health_history=torch.from_numpy(health_history).float(),
@@ -205,10 +216,10 @@ def _test_loader():
 def _test_dataset():
     path = "/Users/nrahaman/Python/ctt/data/output.pkl"
     dataset = ContactDataset(path)
-    sample = dataset.get(0, 25)
+    sample = dataset.get(10, 25)
 
 
 if __name__ == "__main__":
     # _test_loader()
-    # _test_dataset()
+    _test_dataset()
     pass
