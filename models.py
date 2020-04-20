@@ -195,7 +195,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         health_embedding_dim=64,
         time_embedding_dim=32,
         num_encounter_partner_id_bits=16,
-        encounter_partner_id_embedding_dim=128,
+        encounter_partner_id_embedding_dim=32,
         message_dim=8,
         message_embedding_dim=128,
         # Attention
