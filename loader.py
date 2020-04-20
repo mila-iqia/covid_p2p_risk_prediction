@@ -8,6 +8,10 @@ from torch.utils.data.dataloader import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
 
+class InvalidSetSize(Exception):
+    pass
+
+
 class ContactDataset(Dataset):
     SET_VALUED_FIELDS = [
         "encounter_health",
@@ -91,6 +95,8 @@ class ContactDataset(Dataset):
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.
         encounter_info = human_day_info["observed"]["candidate_encounters"]
+        if encounter_info.size == 0:
+            raise InvalidSetSize
         encounter_partner_id, encounter_message, encounter_day = (
             encounter_info[:, 0],
             encounter_info[:, 1],
@@ -113,7 +119,7 @@ class ContactDataset(Dataset):
         )
         encounter_is_contagion = human_day_info["unobserved"][
             "exposure_encounter"
-        ].astype("float32")
+        ][:, None].astype("float32")
         encounter_day = encounter_day.astype("float32")
         # -------- Health --------
         # Get health info
@@ -175,7 +181,12 @@ class ContactDataset(Dataset):
 
     def __getitem__(self, item):
         human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
-        return self.get(human_idx, day_idx)
+        while True:
+            try:
+                return self.get(human_idx, day_idx)
+            except InvalidSetSize:
+                # Try another day
+                day_idx = (day_idx + 1) % self.num_days
 
     @classmethod
     def collate_fn(cls, batch):

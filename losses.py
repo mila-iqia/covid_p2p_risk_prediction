@@ -9,7 +9,9 @@ class InfectiousnessLoss(nn.Module):
             "Infectiousness Loss can only be used on (temporal) "
             "set-valued latent variables."
         )
-        return F.mse_loss(model_output.latent_variable[:, :, 0:1], model_output)
+        return F.mse_loss(
+            model_output.latent_variable[:, :, 0:1], model_input.infectiousness_history
+        )
 
 
 class ContagionLoss(nn.Module):
