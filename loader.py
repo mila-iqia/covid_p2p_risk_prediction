@@ -111,10 +111,10 @@ class ContactDataset(Dataset):
         encounter_info = human_day_info["observed"]["candidate_encounters"]
         # FIXME This is a hack:
         #  Filter encounter_info
-        valid_encounter_mask = encounter_info[:, 2] > (day_idx - 14)
-        encounter_info = encounter_info[valid_encounter_mask]
         if encounter_info.size == 0:
             raise InvalidSetSize
+        valid_encounter_mask = encounter_info[:, 2] > (day_idx - 14)
+        encounter_info = encounter_info[valid_encounter_mask]
         encounter_partner_id, encounter_message, encounter_day = (
             encounter_info[:, 0],
             encounter_info[:, 1],
