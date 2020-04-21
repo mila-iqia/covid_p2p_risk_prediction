@@ -3,7 +3,7 @@ device: "cpu"
 data:
   paths:
     train: "/Users/nrahaman/Python/ctt/data/0-risks"
-    validate: "/Users/nrahaman/Python/ctt/data/0-risks"
+    validate: "/Users/nrahaman/Python/ctt/data/1-risks"
   loader_kwargs:
     batch_size: 8
     shuffle: true
@@ -20,7 +20,7 @@ model:
     num_encounter_partner_id_bits: 16
     encounter_partner_id_embedding_dim: 32
     message_dim: 8
-    message_embedding_dim: 128
+    message_embedding_dim: 32
     num_heads: 4
     sab_capacity: 128
     num_sabs: 2
