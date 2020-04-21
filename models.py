@@ -318,23 +318,3 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             message_placeholder=message_placeholder,
             partner_id_placeholder=partner_id_placeholder,
         )
-
-
-def _test_ctt():
-    from loader import ContactDataset
-    from torch.utils.data import DataLoader
-
-    path = "/Users/nrahaman/Python/ctt/data/output.pkl"
-    dataset = ContactDataset(path)
-    dataloader = DataLoader(dataset, batch_size=5, collate_fn=ContactDataset.collate_fn)
-    batch = next(iter(dataloader))
-
-    ctt = ContactTracingTransformer(pool_latent_entities=False, use_logit_sink=False)
-    output = ctt(batch)
-    print(output.latent_variable.shape)
-    print(output.encounter_variables.shape)
-
-
-if __name__ == "__main__":
-    _test_ctt()
-    pass

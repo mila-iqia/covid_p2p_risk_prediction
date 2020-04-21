@@ -237,22 +237,3 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
         collate_fn=ContactDataset.collate_fn,
     )
     return dataloader
-
-
-def _test_loader():
-    path = "/Users/nrahaman/Python/ctt/data/0-risks"
-    dataloader = get_dataloader(batch_size=5, shuffle=False, num_workers=0, path=path)
-    batch = next(iter(dataloader))
-
-
-def _test_dataset():
-    path = "/Users/nrahaman/Python/ctt/data/0-risks"
-    dataset = ContactDataset(path)
-    sample = dataset.get(890, 25)
-    pass
-
-
-if __name__ == "__main__":
-    _test_loader()
-    # _test_dataset()
-    pass
