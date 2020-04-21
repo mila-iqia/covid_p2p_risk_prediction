@@ -1,5 +1,7 @@
 import pickle
 from addict import Dict
+import os
+import glob
 
 import numpy as np
 import torch
@@ -43,22 +45,35 @@ class ContactDataset(Dataset):
         self._read_data()
 
     def _read_data(self):
-        with open(self.path, "rb") as f:
-            data = pickle.load(f)
-        # Access with data[human_idx, day_idx]
-        # noinspection PyTypeChecker
-        self.data: np.ndarray = np.asarray(list(zip(*data)))
+        assert os.path.isdir(self.path)
+        files = glob.glob(os.path.join(self.path, "*"))
+        day_idxs, human_idxs = zip(
+            *[
+                [
+                    int(component)
+                    for component in os.path.basename(file).strip(".pkl").split("-")
+                ]
+                for file in files
+            ]
+        )
+        self._num_days = max(day_idxs) + 1
+        self._num_humans = max(human_idxs)
 
     @property
     def num_humans(self):
-        return len(self.data)
+        return self._num_humans
 
     @property
     def num_days(self):
-        return len(self.data[0])
+        return self._num_days
 
     def __len__(self):
         return self.num_humans * self.num_days
+
+    def read(self, human_idx, day_idx):
+        file_name = os.path.join(self.path, f"{day_idx}-{human_idx + 1}.pkl")
+        with open(file_name, "rb") as f:
+            return pickle.load(f)
 
     def get(self, human_idx: int, day_idx: int) -> Dict:
         """
@@ -89,12 +104,15 @@ class ContactDataset(Dataset):
                 -> `encounter_day`: the day of encounter, of shape (M, 1)
                 -> `encounter_is_contagion`: whether the encounter was a contagion.
         """
-        human_day = self.data[human_idx, day_idx]
-        human_day_info = next(iter(human_day.values()))
+        human_day_info = self.read(human_idx, day_idx)
         # -------- Encounters --------
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.
         encounter_info = human_day_info["observed"]["candidate_encounters"]
+        # FIXME This is a hack:
+        #  Filter encounter_info
+        valid_encounter_mask = encounter_info[:, 2] > (day_idx - 14)
+        encounter_info = encounter_info[valid_encounter_mask]
         if encounter_info.size == 0:
             raise InvalidSetSize
         encounter_partner_id, encounter_message, encounter_day = (
@@ -117,9 +135,9 @@ class ContactDataset(Dataset):
             .reshape(num_encounters, -1)
             .astype("float32")
         )
-        encounter_is_contagion = human_day_info["unobserved"][
-            "exposure_encounter"
-        ][:, None].astype("float32")
+        encounter_is_contagion = human_day_info["unobserved"]["exposure_encounter"][
+            valid_encounter_mask, None
+        ].astype("float32")
         encounter_day = encounter_day.astype("float32")
         # -------- Health --------
         # Get health info
@@ -131,21 +149,14 @@ class ContactDataset(Dataset):
             axis=1,
         )
         infectiousness_history = human_day_info["unobserved"]["infectiousness"][:, None]
-        history_days = np.clip(np.arange(day_idx - 13, day_idx + 1), 0, None)[:, None]
-        hdi_to_health_at_encounter = lambda hdi: np.concatenate(
-            [
-                hdi["observed"]["reported_symptoms"][0],
-                hdi["observed"]["test_results"][0:1],
-            ],
-            axis=0,
-        ).astype("float32")
+        history_days = np.clip(np.arange(day_idx - 13, day_idx + 1), 0, None)[
+            ::-1, None
+        ]
         # Get historical health info given the day of encounter (shape = (M, 13))
-        health_at_encounter = np.array(
-            [
-                hdi_to_health_at_encounter(next(iter(_human_day_info.values())))
-                for _human_day_info in self.data[human_idx, encounter_day.astype("int")]
-            ]
+        encounter_at_historical_day_idx = np.argmax(
+            encounter_day == history_days, axis=0
         )
+        health_at_encounter = health_history[encounter_at_historical_day_idx, :]
         if human_day_info["unobserved"]["is_recovered"]:
             current_compartment = "R"
         elif human_day_info["unobserved"]["is_infectious"]:
@@ -153,7 +164,7 @@ class ContactDataset(Dataset):
         elif human_day_info["unobserved"]["is_exposed"]:
             current_compartment = "E"
         else:
-            current_compartment = "R"
+            current_compartment = "S"
         current_compartment = np.array(
             [
                 current_compartment == "S",
@@ -229,15 +240,16 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
 
 
 def _test_loader():
-    path = "/Users/nrahaman/Python/ctt/data/output.pkl"
+    path = "/Users/nrahaman/Python/ctt/data/0-risks"
     dataloader = get_dataloader(batch_size=5, shuffle=False, num_workers=0, path=path)
     batch = next(iter(dataloader))
 
 
 def _test_dataset():
-    path = "/Users/nrahaman/Python/ctt/data/output.pkl"
+    path = "/Users/nrahaman/Python/ctt/data/0-risks"
     dataset = ContactDataset(path)
-    sample = dataset.get(10, 25)
+    sample = dataset.get(890, 25)
+    pass
 
 
 if __name__ == "__main__":

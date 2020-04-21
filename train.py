@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import torch
 import torch.nn as nn
 
@@ -74,7 +76,7 @@ class CTTTrainer(IOMixin, BaseExperiment):
             )
 
     def validate_epoch(self):
-        losses = []
+        all_losses = None
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
