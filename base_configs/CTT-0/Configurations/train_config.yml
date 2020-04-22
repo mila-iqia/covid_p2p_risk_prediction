@@ -2,8 +2,8 @@ device: "cpu"
 
 data:
   paths:
-    train: "/Users/nrahaman/Python/ctt/data/0-risks"
-    validate: "/Users/nrahaman/Python/ctt/data/1-risks"
+    train: "./data/0-risks"
+    validate: "./data/1-risks"
   loader_kwargs:
     batch_size: 8
     shuffle: true
