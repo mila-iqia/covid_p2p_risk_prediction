@@ -67,6 +67,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
 
     def train_epoch(self):
         self.clear_moving_averages()
+        self.model.train()
         for model_input in self.progress(self.train_loader, tag="train"):
             # Evaluate model
             model_input = to_device(model_input, self.device)
@@ -90,6 +91,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
 
     def validate_epoch(self):
         all_losses = defaultdict(list)
+        self.model.eval()
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
