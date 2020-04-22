@@ -44,3 +44,6 @@ optim:
 
 training:
   num_epochs: 10
+
+wandb:
+  log_every: 50
