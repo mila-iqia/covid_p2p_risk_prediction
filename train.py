@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from addict import Dict
 
@@ -100,6 +101,8 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         # Compute mean for all losses
         all_losses = Dict({key: np.mean(val) for key, val in all_losses.items()})
         self.log_validation_losses(all_losses)
+        # Store the validation loss in cache. This will be used for checkpointing.
+        self.write_to_cache("current_validation_loss", all_losses.loss)
         return all_losses
 
     def log_training_losses(self, losses):
@@ -109,6 +112,26 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
                 {f"training_{k}": v for k, v in losses.unweighted_losses.items()}
             )
             self.wandb_log(**metrics)
+        return self
+
+    def checkpoint(self, force=True):
+        current_validation_loss = self.read_from_cache(
+            "current_validation_loss", float("inf")
+        )
+        best_validation_loss = self.read_from_cache(
+            "best_validation_loss", float("inf")
+        )
+        if current_validation_loss < best_validation_loss:
+            self.write_to_cache("best_validation_loss", current_validation_loss)
+            ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
+        else:
+            ckpt_path = None
+        if ckpt_path is not None:
+            info_dict = {
+                "model": self.model.state_dict(),
+                "optim": self.optim.state_dict(),
+            }
+            torch.save(info_dict, ckpt_path)
         return self
 
     def log_validation_losses(self, losses):
