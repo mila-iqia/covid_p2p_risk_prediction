@@ -24,6 +24,30 @@ class Tests(unittest.TestCase):
         self.assertEqual(output.encounter_variables.shape[0], batch_size)
         # print(output.encounter_variables.shape)
 
+    def test_losses(self):
+        from loader import ContactDataset
+        from torch.utils.data import DataLoader
+        from models import ContactTracingTransformer
+        from losses import ContagionLoss
+
+        batch_size = 5
+        path = "../data/0-risks"
+        dataset = ContactDataset(path)
+        dataloader = DataLoader(
+            dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
+        )
+        batch = next(iter(dataloader))
+
+        ctt = ContactTracingTransformer(
+            pool_latent_entities=False, use_logit_sink=False
+        )
+        output = ctt(batch)
+
+        loss_fn = ContagionLoss(allow_multiple_exposures=True)
+        loss = loss_fn(batch, output)
+        loss_fn = ContagionLoss(allow_multiple_exposures=False)
+        loss = loss_fn(batch, output)
+
     def test_loader(self):
         from loader import get_dataloader
 
