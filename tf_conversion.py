@@ -2,7 +2,7 @@ import onnx
 from onnx_tf.backend import prepare
 from models import ContactTracingTransformer
 from loader import get_dataloader
-
+import torch
 path = "output.pkl"
 dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0, path=path)
 batch = next(iter(dataloader))
@@ -24,5 +24,7 @@ tf_model.export_graph('tf_graph2.pb')
 
 #Sanity check with the PyTorch Model
 ctt = ContactTracingTransformer(pool_latent_entities=False, use_logit_sink=False)
+ctt.load_state_dict(torch.load('model.pth'))
+ctt.eval()
 output = ctt(batch)
 print(output)
