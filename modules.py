@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class HealthEmbedding(nn.Sequential):
+class HealthHistoryEmbedding(nn.Sequential):
     def __init__(self, in_features, embedding_size, capacity=128, dropout=0.1):
-        super(HealthEmbedding, self).__init__(
+        super(HealthHistoryEmbedding, self).__init__(
             nn.Linear(in_features, capacity),
             nn.Dropout(dropout),
             nn.ReLU(),
@@ -12,10 +12,14 @@ class HealthEmbedding(nn.Sequential):
         )
 
     def forward(self, input, mask=None):
-        output = super(HealthEmbedding, self).forward(input)
+        output = super(HealthHistoryEmbedding, self).forward(input)
         if mask is not None:
             output = output * mask[:, :, None]
         return output
+
+
+class HealthProfileEmbedding(HealthHistoryEmbedding):
+    pass
 
 
 class MessageEmbedding(nn.Sequential):

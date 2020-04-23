@@ -14,8 +14,8 @@ model:
   kwargs:
     capacity: 128
     dropout: 0.1
-    num_health_features: 13
-    health_embedding_dim: 64
+    num_health_history_features: 13
+    health_history_embedding_dim: 64
     time_embedding_dim: 32
     num_encounter_partner_id_bits: 16
     encounter_partner_id_embedding_dim: 32
