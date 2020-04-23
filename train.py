@@ -71,7 +71,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         for model_input in self.progress(self.train_loader, tag="train"):
             # Evaluate model
             model_input = to_device(model_input, self.device)
-            model_output = self.model(model_input)
+            model_output = Dict(self.model(model_input))
             # Compute loss
             losses = self.loss(model_input, model_output)
             loss = losses.loss
@@ -95,7 +95,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
-                model_output = self.model(model_input)
+                model_output = Dict(self.model(model_input))
                 losses = self.loss(model_input, model_output)
                 all_losses["loss"].append(losses.loss.item())
                 for key in losses.unweighted_losses:

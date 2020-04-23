@@ -9,6 +9,7 @@ class Tests(unittest.TestCase):
         from loader import ContactDataset
         from torch.utils.data import DataLoader
         from models import ContactTracingTransformer
+        from addict import Dict
 
         batch_size = 5
         path = "../data/0-risks"
@@ -21,7 +22,7 @@ class Tests(unittest.TestCase):
         ctt = ContactTracingTransformer(
             pool_latent_entities=False, use_logit_sink=False
         )
-        output = ctt(batch)
+        output = Dict(ctt(batch))
         # print(output.latent_variable.shape)
         self.assertEqual(output.latent_variable.shape[0], batch_size)
         self.assertEqual(output.encounter_variables.shape[0], batch_size)
