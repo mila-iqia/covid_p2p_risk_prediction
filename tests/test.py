@@ -4,6 +4,7 @@ import unittest
 class Tests(unittest.TestCase):
 
     DATASET_PATH = "../data/1k-1-output"
+    NUM_KEYS_IN_BATCH = 12
 
     def test_model(self):
         from loader import ContactDataset
@@ -12,7 +13,7 @@ class Tests(unittest.TestCase):
         from addict import Dict
 
         batch_size = 5
-        path = "../data/0-risks"
+        path = self.DATASET_PATH
         dataset = ContactDataset(path)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
@@ -62,7 +63,7 @@ class Tests(unittest.TestCase):
             batch_size=batch_size, shuffle=False, num_workers=0, path=path
         )
         batch = next(iter(dataloader))
-        self.assertEqual(len(batch), 13)
+        self.assertEqual(len(batch), self.NUM_KEYS_IN_BATCH)
         # Testing that all the keys in the batch have the batch_size
         keys_in_batch = list(batch.keys())
         for key in keys_in_batch:
@@ -77,7 +78,7 @@ class Tests(unittest.TestCase):
             batch_size=batch_size, shuffle=False, num_workers=2, path=path
         )
         batch = next(iter(dataloader))
-        self.assertEqual(len(batch), 13)
+        self.assertEqual(len(batch), self.NUM_KEYS_IN_BATCH)
         # Testing that all the keys in the batch have the batch_size
         keys_in_batch = list(batch.keys())
         for key in keys_in_batch:
@@ -87,7 +88,7 @@ class Tests(unittest.TestCase):
         from loader import ContactDataset
         from addict import Dict
 
-        path = "../data/0-risks"
+        path = self.DATASET_PATH
         dataset = ContactDataset(path)
         sample = dataset.get(890, 25)
         self.assertIsInstance(sample, Dict)
