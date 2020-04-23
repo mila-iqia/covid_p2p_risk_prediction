@@ -13,6 +13,8 @@ from models import ContactTracingTransformer
 from loader import get_dataloader
 from losses import WeightedSum
 from utils import to_device, momentum_accumulator
+from scheduler import GradualWarmupScheduler
+from torch.optim.lr_scheduler import StepLR, ExponentialLR
 
 
 class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
@@ -27,6 +29,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         self._build_loaders()
         self._build_model()
         self._build_criteria_and_optim()
+        self._build_scheduler()
 
     def _build_model(self):
         self.model: nn.Module = to_device(
@@ -50,6 +53,10 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.model.parameters(), **self.get("optim/kwargs")
         )
 
+    def _build_scheduler(self):
+        self._base_scheduler = StepLR(self.optim, step_size=10, gamma=0.1)
+        self.scheduler = GradualWarmupScheduler(self.optim, multiplier=1, total_epoch=5, after_scheduler=self._base_scheduler)
+
     @property
     def device(self):
         return self.get("device", "cpu")
@@ -63,6 +70,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.train_epoch()
             validation_stats = self.validate_epoch()
             self.log_progress("epochs", **validation_stats)
+            self.scheduler.step(epoch)
             self.next_epoch()
 
     def train_epoch(self):
