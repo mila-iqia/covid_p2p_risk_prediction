@@ -15,11 +15,16 @@ class InvalidSetSize(Exception):
 
 
 class ContactDataset(Dataset):
+    DEFAULT_AGE = 40
+    DEFAULT_SEX = 0
+    DEFAULT_ENCOUNTER_DURATION = 10
+
     SET_VALUED_FIELDS = [
         "encounter_health",
         "encounter_message",
         "encounter_partner_id",
         "encounter_day",
+        "encounter_duration",
         "encounter_is_contagion",
     ]
 
@@ -90,6 +95,8 @@ class ContactDataset(Dataset):
             An addict with the following attributes:
                 -> `health_history`: 14-day health history of self of shape (14, 13)
                         with channels `reported_symptoms` (12), `test_results`(1).
+                -> `age`: age of self, of shape (1,)
+                -> `sex`: sex of self, of shape (1,)
                 -> `history_days`: time-stamps to go with the health_history.
                 -> `current_compartment`: current epidemic compartment (S/E/I/R)
                     of shape (4,).
@@ -101,6 +108,7 @@ class ContactDataset(Dataset):
                 -> `encounter_partner_id`: id of the other in the encounter,
                         of shape (M, num_id_bits). If num_id_bits = 16, it means that the
                         id (say 65535) is represented in 16-bit binary.
+                -> `encounter_duration`: duration of encounter, of shape (M, 1)
                 -> `encounter_day`: the day of encounter, of shape (M, 1)
                 -> `encounter_is_contagion`: whether the encounter was a contagion.
         """
@@ -118,11 +126,32 @@ class ContactDataset(Dataset):
         # Check again
         if encounter_info.size == 0:
             raise InvalidSetSize
-        encounter_partner_id, encounter_message, encounter_day = (
-            encounter_info[:, 0],
-            encounter_info[:, 1],
-            encounter_info[:, 2],
-        )
+        if encounter_info.shape[1] == 3:
+            encounter_partner_id, encounter_message, encounter_day = (
+                encounter_info[:, 0],
+                encounter_info[:, 1],
+                encounter_info[:, 2],
+            )
+            # encounter_duration is not available in this version, so we use
+            # a default constant of 10 minutes. The network shouldn't care.
+            encounter_duration = (
+                np.zeros(shape=(encounter_info.shape[0], 1))
+                + self.DEFAULT_ENCOUNTER_DURATION
+            )
+        elif encounter_info.shape[1] == 4:
+            (
+                encounter_partner_id,
+                encounter_message,
+                encounter_duration,
+                encounter_day,
+            ) = (
+                encounter_info[:, 0],
+                encounter_info[:, 1],
+                encounter_info[:, 2],
+                encounter_info[:, 3],
+            )
+        else:
+            raise ValueError
         num_encounters = encounter_info.shape[0]
         # Convert partner-id's to binary (shape = (M, num_id_bits))
         encounter_partner_id = (
@@ -176,6 +205,9 @@ class ContactDataset(Dataset):
                 current_compartment == "R",
             ]
         ).astype("float32")
+        # Get age and sex if available, else use a default
+        age = np.array([human_day_info["observed"].get("age", self.DEFAULT_AGE)])
+        sex = np.array([human_day_info["observed"].get("sex", self.DEFAULT_SEX)])
         # Normalize both days to assign 0 to present
         if self.relative_days:
             history_days = history_days - day_idx
@@ -183,6 +215,8 @@ class ContactDataset(Dataset):
         # This should be it
         return Dict(
             health_history=torch.from_numpy(health_history).float(),
+            age=torch.from_numpy(age).float(),
+            sex=torch.from_numpy(sex).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
             history_days=torch.from_numpy(history_days).float(),
             current_compartment=torch.from_numpy(current_compartment).float(),
@@ -190,6 +224,7 @@ class ContactDataset(Dataset):
             encounter_message=torch.from_numpy(encounter_message).float(),
             encounter_partner_id=torch.from_numpy(encounter_partner_id).float(),
             encounter_day=torch.from_numpy(encounter_day[:, None]).float(),
+            encounter_duration=torch.from_numpy(encounter_duration[:, None]).float(),
             encounter_is_contagion=torch.from_numpy(encounter_is_contagion).float(),
         )
 

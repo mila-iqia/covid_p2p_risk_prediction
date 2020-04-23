@@ -2,6 +2,9 @@ import unittest
 
 
 class Tests(unittest.TestCase):
+
+    DATASET_PATH = "../data/1k-1-output"
+
     def test_model(self):
         from loader import ContactDataset
         from torch.utils.data import DataLoader
@@ -31,7 +34,7 @@ class Tests(unittest.TestCase):
         from losses import ContagionLoss
 
         batch_size = 5
-        path = "../data/0-risks"
+        path = self.DATASET_PATH
         dataset = ContactDataset(path)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
@@ -51,13 +54,28 @@ class Tests(unittest.TestCase):
     def test_loader(self):
         from loader import get_dataloader
 
-        path = "../data/0-risks"
+        path = self.DATASET_PATH
+        batch_size = 5
+        dataloader = get_dataloader(
+            batch_size=batch_size, shuffle=False, num_workers=0, path=path
+        )
+        batch = next(iter(dataloader))
+        self.assertEqual(len(batch), 13)
+        # Testing that all the keys in the batch have the batch_size
+        keys_in_batch = list(batch.keys())
+        for key in keys_in_batch:
+            self.assertEqual(len(batch[key]), batch_size)
+
+    def test_loader_with_multiprocessing(self):
+        from loader import get_dataloader
+
+        path = self.DATASET_PATH
         batch_size = 5
         dataloader = get_dataloader(
             batch_size=batch_size, shuffle=False, num_workers=2, path=path
         )
         batch = next(iter(dataloader))
-        self.assertEqual(len(batch), 10)
+        self.assertEqual(len(batch), 13)
         # Testing that all the keys in the batch have the batch_size
         keys_in_batch = list(batch.keys())
         for key in keys_in_batch:
