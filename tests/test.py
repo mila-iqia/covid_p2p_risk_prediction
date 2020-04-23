@@ -33,6 +33,7 @@ class Tests(unittest.TestCase):
         from torch.utils.data import DataLoader
         from models import ContactTracingTransformer
         from losses import ContagionLoss
+        from addict import Dict
 
         batch_size = 5
         path = self.DATASET_PATH
@@ -45,7 +46,7 @@ class Tests(unittest.TestCase):
         ctt = ContactTracingTransformer(
             pool_latent_entities=False, use_logit_sink=False
         )
-        output = ctt(batch)
+        output = Dict(ctt(batch))
 
         loss_fn = ContagionLoss(allow_multiple_exposures=True)
         loss = loss_fn(batch, output)
