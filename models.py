@@ -28,6 +28,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         self._build_loaders()
         self._build_model()
         self._build_criteria_and_optim()
+        self._build_scheduler()
 
     def _build_model(self):
         self.model: nn.Module = to_device(
@@ -52,7 +53,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         )
 
     def _build_scheduler(self):
-        self.scheduler_steplr = StepLR(optim, step_size=10, gamma=0.1)
+        self.scheduler_steplr = StepLR(self.optim, step_size=10, gamma=0.1)
         self.scheduler_warmup = GradualWarmupScheduler(self.optim, multiplier=1, total_epoch=5, after_scheduler=self.scheduler_steplr)
 
     @property
