@@ -24,6 +24,25 @@ class ContactDataset(Dataset):
         "encounter_is_contagion",
     ]
 
+    INPUT_FIELD_TO_SLICE_MAPPING = {
+        "health_history": ("health_history", slice(None)),
+        "reported_symptoms": ("health_history", slice(0, 12)),
+        "test_results": ("health_history", slice(12, 13)),
+        "age": ("health_profile", slice(0, 1)),
+        "sex": ("health_profile", slice(1, 2)),
+        "preexisting_conditions": ("health_profile", slice(3, 7)),
+        "history_days": ("history_days", slice(None)),
+        "current_compartment": ("current_compartment", slice(None)),
+        "infectiousness_history": ("infectiousness_history", slice(None)),
+        "reported_symptoms_at_encounter": ("encounter_health", slice(0, 12)),
+        "test_results_at_encounter": ("encounter_health", slice(12, 13)),
+        "encounter_message": ("encounter_message", slice(None)),
+        "encounter_partner_id": ("encounter_partner_id", slice(None)),
+        "encounter_duration": ("encounter_duration", slice(None)),
+        "encounter_day": ("encounter_day", slice(None)),
+        "encounter_is_contagion": ("encounter_is_contagion", slice(None)),
+    }
+
     # Compat with previous versions of the dataset
     DEFAULT_AGE = 0
     DEFAULT_SEX = 0
@@ -269,6 +288,11 @@ class ContactDataset(Dataset):
         collates.update(fixed_size_collates)
         collates.update(padded_collates)
         return collates
+
+    @classmethod
+    def extract(cls, tensor_or_dict, field):
+        # TODO
+        pass
 
 
 def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):

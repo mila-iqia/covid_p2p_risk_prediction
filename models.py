@@ -18,7 +18,8 @@ class _ContactTracingTransformer(nn.Module):
     def __init__(
         self,
         *,
-        health_embedding: nn.Module,
+        health_history_embedding: nn.Module,
+        health_profile_embedding: nn.Module,
         time_embedding: nn.Module,
         partner_id_embedding: nn.Module,
         message_embedding: nn.Module,
@@ -33,7 +34,8 @@ class _ContactTracingTransformer(nn.Module):
         partner_id_placeholder: nn.Parameter,
     ):
         super(_ContactTracingTransformer, self).__init__()
-        self.health_embedding = health_embedding
+        self.health_history_embedding = health_history_embedding
+        self.health_profile_embedding = health_profile_embedding
         self.time_embedding = time_embedding
         self.partner_id_embedding = partner_id_embedding
         self.message_embedding = message_embedding
@@ -55,6 +57,9 @@ class _ContactTracingTransformer(nn.Module):
             A python dict with the following keys:
                 -> `health_history`: a B(T=14)C tensor of the 14-day health
                     history (symptoms + test results + day) of the individual.
+                -> `health_profile`: a B(T=14)C tensor of the health profile
+                    containing (age + health + preexisting_conditions) of the
+                    individual.
                 -> `history_days`: a B(T=14)1 tensor of the day corresponding to the
                     T dimension in `health_history`.
                 -> `encounter_health`: a BMC tensor of health during an
@@ -75,14 +80,21 @@ class _ContactTracingTransformer(nn.Module):
         num_history_days = inputs["health_history"].shape[1]
         num_encounters = inputs["encounter_health"].shape[1]
         # -------- Embeddings --------
-        # Embed health
-        embedded_health_history = self.health_embedding(inputs["health_history"])
-        embedded_encounter_health = self.health_embedding(
+        # Embed health history
+        embedded_health_history = self.health_history_embedding(
+            inputs["health_history"]
+        )
+        embedded_health_profile = self.health_profile_embedding(
+            inputs["health_profile"]
+        )
+        embedded_encounter_health = self.health_history_embedding(
             inputs["encounter_health"], inputs["mask"]
         )
         # Embed time (days)
         embedded_history_days = self.time_embedding(inputs["history_days"])
-        embedded_encounter_day = self.time_embedding(inputs["encounter_day"], inputs["mask"])
+        embedded_encounter_day = self.time_embedding(
+            inputs["encounter_day"], inputs["mask"]
+        )
         # Embed partner-IDs
         embedded_encounter_partner_ids = self.partner_id_embedding(
             inputs["encounter_partner_id"], inputs["mask"]
@@ -191,8 +203,10 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         # Embeddings
         capacity=128,
         dropout=0.1,
-        num_health_features=13,
-        health_embedding_dim=64,
+        num_health_history_features=13,
+        health_history_embedding_dim=64,
+        num_health_profile_features=7,
+        health_profile_embedding_dim=32,
         time_embedding_dim=32,
         num_encounter_partner_id_bits=16,
         encounter_partner_id_embedding_dim=32,
@@ -210,9 +224,15 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         latent_variable_output_features=1,
     ):
         # ------- Embeddings -------
-        health_embedding = mods.HealthEmbedding(
-            in_features=num_health_features,
-            embedding_size=health_embedding_dim,
+        health_history_embedding = mods.HealthHistoryEmbedding(
+            in_features=num_health_history_features,
+            embedding_size=health_history_embedding_dim,
+            capacity=capacity,
+            dropout=dropout,
+        )
+        health_profile_embedding = mods.HealthProfileEmbedding(
+            in_features=num_health_profile_features,
+            embedding_size=health_profile_embedding_dim,
             capacity=capacity,
             dropout=dropout,
         )
@@ -231,7 +251,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         sab_in_dim = (
             time_embedding_dim
             + encounter_partner_id_embedding_dim
-            + health_embedding_dim
+            + health_history_embedding_dim
             + message_embedding_dim
         )
         sab_metadata_dim = time_embedding_dim + encounter_partner_id_embedding_dim
@@ -304,7 +324,8 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         entity_masker = mods.EntityMasker()
         # Done; init the super
         super(ContactTracingTransformer, self).__init__(
-            health_embedding=health_embedding,
+            health_history_embedding=health_history_embedding,
+            health_profile_embedding=health_profile_embedding,
             time_embedding=time_embedding,
             partner_id_embedding=partner_id_embedding,
             message_embedding=message_embedding,
