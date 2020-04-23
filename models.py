@@ -51,8 +51,8 @@ class _ContactTracingTransformer(nn.Module):
         """
         Parameters
         ----------
-        inputs : Dict
-            An addict with the following fields:
+        inputs : dict
+            A python dict with the following keys:
                 -> `health_history`: a B(T=14)C tensor of the 14-day health
                     history (symptoms + test results + day) of the individual.
                 -> `history_days`: a B(T=14)1 tensor of the day corresponding to the
@@ -71,25 +71,25 @@ class _ContactTracingTransformer(nn.Module):
         Dict
         """
         # -------- Shape Wrangling --------
-        batch_size = inputs.health_history.shape[0]
-        num_history_days = inputs.health_history.shape[1]
-        num_encounters = inputs.encounter_health.shape[1]
+        batch_size = inputs["health_history"].shape[0]
+        num_history_days = inputs["health_history"].shape[1]
+        num_encounters = inputs["encounter_health"].shape[1]
         # -------- Embeddings --------
         # Embed health
-        embedded_health_history = self.health_embedding(inputs.health_history)
+        embedded_health_history = self.health_embedding(inputs["health_history"])
         embedded_encounter_health = self.health_embedding(
-            inputs.encounter_health, inputs.mask
+            inputs["encounter_health"], inputs["mask"]
         )
         # Embed time (days)
-        embedded_history_days = self.time_embedding(inputs.history_days)
-        embedded_encounter_day = self.time_embedding(inputs.encounter_day, inputs.mask)
+        embedded_history_days = self.time_embedding(inputs["history_days"])
+        embedded_encounter_day = self.time_embedding(inputs["encounter_day"], inputs["mask"])
         # Embed partner-IDs
         embedded_encounter_partner_ids = self.partner_id_embedding(
-            inputs.encounter_partner_id, inputs.mask
+            inputs["encounter_partner_id"], inputs["mask"]
         )
         # Embed messages
         embedded_encounter_messages = self.message_embedding(
-            inputs.encounter_message, inputs.mask
+            inputs["encounter_message"], inputs["mask"]
         )
         # -------- Self Attention --------
         # Prepare the entities -- one set for the encounters and the other for self health
@@ -123,10 +123,10 @@ class _ContactTracingTransformer(nn.Module):
         entities = torch.cat([encounter_entities, self_entities], dim=1)
         extra_mask = torch.ones(
             size=(batch_size, num_history_days),
-            dtype=inputs.mask.dtype,
-            device=inputs.mask.device,
+            dtype=inputs["mask"].dtype,
+            device=inputs["mask"].device,
         )
-        expanded_mask = torch.cat([inputs.mask, extra_mask], dim=1)
+        expanded_mask = torch.cat([inputs["mask"], extra_mask], dim=1)
         entities = self.entity_masker(entities, expanded_mask)
         # Grab a copy of the "meta-data", which we will be appending to entities at
         # every step. These meta-data are the time-stamps and partner_ids
@@ -178,9 +178,9 @@ class _ContactTracingTransformer(nn.Module):
         )
         encounter_variables = self.encounter_mlp(pre_encounter_variables)
         # Done: pack to an addict and return
-        results = Dict()
-        results.encounter_variables = encounter_variables
-        results.latent_variable = latent_variable
+        results = dict()
+        results["encounter_variables"] = encounter_variables
+        results["latent_variable"] = latent_variable
         return results
 
 
@@ -318,23 +318,3 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             message_placeholder=message_placeholder,
             partner_id_placeholder=partner_id_placeholder,
         )
-
-
-def _test_ctt():
-    from loader import ContactDataset
-    from torch.utils.data import DataLoader
-
-    path = "/Users/nrahaman/Python/ctt/data/output.pkl"
-    dataset = ContactDataset(path)
-    dataloader = DataLoader(dataset, batch_size=5, collate_fn=ContactDataset.collate_fn)
-    batch = next(iter(dataloader))
-
-    ctt = ContactTracingTransformer(pool_latent_entities=False, use_logit_sink=False)
-    output = ctt(batch)
-    print(output.latent_variable.shape)
-    print(output.encounter_variables.shape)
-
-
-if __name__ == "__main__":
-    _test_ctt()
-    pass

@@ -40,13 +40,43 @@ class ContagionLoss(nn.Module):
         self.allow_multiple_exposures = allow_multiple_exposures
 
     def forward(self, model_input, model_output):
+        contagion_logit = model_output.encounter_variables[:, :, 0:1]
+        B, M, C = contagion_logit.shape
         if self.allow_multiple_exposures:
+            # encounter_variables.shape = BM1
             return F.binary_cross_entropy_with_logits(
-                model_output.encounter_variables, model_input.encounter_is_contagion
+                contagion_logit, model_input.encounter_is_contagion,
             )
         else:
-            # TODO
-            raise NotImplementedError
+            # Now, one of the encounters could have been the exposure event -- or not.
+            # To account for this, we use a little trick and append a 0-logit to the
+            # encounter variables before passing through a softmax. This 0-logit acts
+            # as a logit sink, and enables us to avoid an extra pooling operation in
+            # the transformer architecture.
+            logit_sink = torch.zeros(
+                (B, 1), dtype=contagion_logit.dtype, device=contagion_logit.device,
+            )
+            # full_logit.shape = B(1+M)
+            full_logit = torch.cat([logit_sink, contagion_logit[:, :, 0]], dim=1)
+            target_onehots = self._prepare_single_exposure_targets(
+                model_input.encounter_is_contagion
+            )
+            # Now compute the softmax loss
+            return F.cross_entropy(full_logit, target_onehots)
+
+    @staticmethod
+    def _prepare_single_exposure_targets(target_onehots):
+        if target_onehots.dim() == 3:
+            target_onehots = target_onehots[:, :, 0]
+        assert target_onehots.dim() == 2
+        # none_hot_mask.shape = (B,)
+        nonehot_mask = torch.eq(target_onehots.max(1).values, 0.0)
+        # We add the 1 because all index is moved one element to the right due to
+        # the logit sink in the `full_logit`.
+        target_idxs = torch.argmax(target_onehots, dim=1) + 1
+        # Set the target_idx to 0 where none-hot
+        target_idxs[nonehot_mask] = 0
+        return target_idxs
 
 
 class WeightedSum(nn.Module):
