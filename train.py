@@ -1,3 +1,7 @@
+from collections import defaultdict
+from addict import Dict
+
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -52,10 +56,10 @@ class CTTTrainer(IOMixin, BaseExperiment):
             range(self.get("training/num_epochs", ensure_exists=True)), tag="epochs"
         ):
             self.train_epoch()
-            # self.validate_epoch()
+            validation_stats = self.validate_epoch()
+            self.log_progress("epochs", **validation_stats)
 
     def train_epoch(self):
-        acm = momentum_accumulator(0.9)
         self.clear_moving_averages()
         for model_input in self.progress(self.train_loader, tag="train"):
             # Evaluate model
@@ -68,24 +72,29 @@ class CTTTrainer(IOMixin, BaseExperiment):
             loss.backward()
             self.optim.step()
             # Log to pbar
-            self.accumulate_in_cache("moving_loss", loss.item(), acm)
+            self.accumulate_in_cache(
+                "moving_loss", loss.item(), momentum_accumulator(0.9)
+            )
             self.log_progress(
                 "train", loss=self.read_from_cache("moving_loss"),
             )
 
     def validate_epoch(self):
-        losses = []
+        all_losses = defaultdict(list)
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
                 model_output = self.model(model_input)
-                # TODO Continue
+                losses = self.loss(model_input, model_output)
+                all_losses["loss"].append(losses.loss.item())
+                for key in losses.unweighted_losses:
+                    all_losses[key].append(losses.unweighted_losses[key].item())
+        # Compute mean for all losses
+        all_losses = Dict({key: np.mean(val) for key, val in all_losses.items()})
+        return all_losses
 
     def clear_moving_averages(self):
         return self.clear_in_cache("moving_loss")
-
-    def maintain_moving_averages(self):
-        pass
 
 
 if __name__ == "__main__":
