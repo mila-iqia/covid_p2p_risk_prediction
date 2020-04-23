@@ -2,6 +2,7 @@ import pickle
 from addict import Dict
 import os
 import glob
+from typing import Union
 
 import numpy as np
 import torch
@@ -30,7 +31,7 @@ class ContactDataset(Dataset):
         "test_results": ("health_history", slice(12, 13)),
         "age": ("health_profile", slice(0, 1)),
         "sex": ("health_profile", slice(1, 2)),
-        "preexisting_conditions": ("health_profile", slice(3, 7)),
+        "preexisting_conditions": ("health_profile", slice(2, 7)),
         "history_days": ("history_days", slice(None)),
         "current_compartment": ("current_compartment", slice(None)),
         "infectiousness_history": ("infectiousness_history", slice(None)),
@@ -290,9 +291,47 @@ class ContactDataset(Dataset):
         return collates
 
     @classmethod
-    def extract(cls, tensor_or_dict, field):
-        # TODO
-        pass
+    def extract(
+        cls,
+        tensor_or_dict: Union[torch.Tensor, dict],
+        query_field: str,
+        tensor_name: str = None,
+    ) -> torch.Tensor:
+        """
+        This function can do two things.
+            1. Given a dict (output from __getitem__/get or from collate_fn),
+               extract the field given by name `query_fields`.
+            2. Given a tensor and a `tensor_name`, assume that the tensor originated
+               by indexing the dictionary returned by `__getitem__`/`get`/`collate_fn`
+               with `tensor_name`. Now, proceed to extract the field given by name
+               `query_fields`.
+        Parameters
+        ----------
+        tensor_or_dict : torch.Tensor or dict
+            Torch tensor or dictionary.
+        query_field : str
+            Name of the field to extract.
+        tensor_name : str
+            If `tensor_or_dict` is a torch tensor, assume this is the dictionary
+            key that was used to obtain the said tensor. Can be set to None if
+            tensor_or_dict is a dict, but if not, it will be validated.
+
+        Returns
+        -------
+        torch.Tensor
+        """
+        assert query_field in cls.INPUT_FIELD_TO_SLICE_MAPPING
+        if isinstance(tensor_or_dict, dict):
+            assert tensor_name is not None
+            tensor_name, slice_ = cls.INPUT_FIELD_TO_SLICE_MAPPING[query_field]
+            tensor = tensor_or_dict[tensor_name]
+        elif torch.is_tensor(tensor_or_dict):
+            target_tensor_name, slice_ = cls.INPUT_FIELD_TO_SLICE_MAPPING[query_field]
+            assert target_tensor_name == tensor_name
+            tensor = tensor_or_dict
+        else:
+            raise TypeError
+        return tensor[..., slice_]
 
 
 def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
