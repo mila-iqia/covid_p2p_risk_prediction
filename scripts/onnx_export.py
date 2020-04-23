@@ -4,7 +4,7 @@ import torch.onnx
 from loader import get_dataloader
 
 model = ContactTracingTransformer()
-model.load_state_dict(torch.load("models/model.pth"))
+model.load_state_dict(torch.load("model.pth"))
 model.eval()
 path = "output.pkl"
 dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0, path=path)
@@ -15,9 +15,9 @@ for i in batch:
     input_names.append(i)
 torch.onnx.export(model,            
                   batch,                         
-                  "model_onnx.onnx",   
+                  "model_onnx_10.onnx",   
                   export_params=True,        
-                  opset_version=9,          
+                  opset_version=10,          
                   do_constant_folding=True,  
                   input_names = input_names,  
                   output_names = ['latent_variable','encounter_variable']) 
