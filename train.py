@@ -53,8 +53,8 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         )
 
     def _build_scheduler(self):
-        self.scheduler_steplr = StepLR(self.optim, step_size=10, gamma=0.1)
-        self.scheduler_warmup = GradualWarmupScheduler(self.optim, multiplier=1, total_epoch=5, after_scheduler=self.scheduler_steplr)
+        self._base_scheduler = StepLR(self.optim, step_size=10, gamma=0.1)
+        self.scheduler = GradualWarmupScheduler(self.optim, multiplier=1, total_epoch=5, after_scheduler=self._base_scheduler)
 
     @property
     def device(self):
@@ -69,7 +69,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.train_epoch()
             validation_stats = self.validate_epoch()
             self.log_progress("epochs", **validation_stats)
-            self.scheduler_warmup.step(epoch)
+            self.scheduler.step(epoch)
             self.next_epoch()
 
     def train_epoch(self):
