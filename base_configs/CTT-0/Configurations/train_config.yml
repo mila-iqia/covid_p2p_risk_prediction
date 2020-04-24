@@ -19,6 +19,7 @@ model:
     num_health_profile_features: 7
     health_profile_embedding_dim: 32
     time_embedding_dim: 32
+    encounter_duration_embedding_dim: 32
     num_encounter_partner_id_bits: 16
     encounter_partner_id_embedding_dim: 32
     message_dim: 8
