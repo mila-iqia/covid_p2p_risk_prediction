@@ -46,6 +46,8 @@ class ContactDataset(Dataset):
 
     # Compat with previous versions of the dataset
     DEFAULT_AGE = 0
+    ASSUMED_MAX_AGE = 100
+    ASSUMED_MIN_AGE = 1
     DEFAULT_SEX = 0
     DEFAULT_ENCOUNTER_DURATION = 10
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -229,7 +231,7 @@ class ContactDataset(Dataset):
             ]
         ).astype("float32")
         # Get age and sex if available, else use a default
-        age = np.array([human_day_info["observed"].get("age", self.DEFAULT_AGE)])
+        age = self._fetch_age(human_day_info)
         sex = np.array([human_day_info["observed"].get("sex", self.DEFAULT_SEX)])
         preexsting_conditions = human_day_info["observed"].get(
             "preexisting_conditions", np.array(self.DEFAULT_PREEXISTING_CONDITIONS)
@@ -253,6 +255,14 @@ class ContactDataset(Dataset):
             encounter_duration=torch.from_numpy(encounter_duration[:, None]).float(),
             encounter_is_contagion=torch.from_numpy(encounter_is_contagion).float(),
         )
+
+    def _fetch_age(self, human_day_info):
+        age = human_day_info["observed"].get("age", self.DEFAULT_AGE)
+        if age == 0:
+            age = -1
+        else:
+            age = (age - self.ASSUMED_MIN_AGE) / (self.ASSUMED_MAX_AGE - self.ASSUMED_MIN_AGE)
+        return np.array([age])
 
     def __getitem__(self, item):
         human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
@@ -322,12 +332,12 @@ class ContactDataset(Dataset):
         """
         assert query_field in cls.INPUT_FIELD_TO_SLICE_MAPPING
         if isinstance(tensor_or_dict, dict):
-            assert tensor_name is not None
             tensor_name, slice_ = cls.INPUT_FIELD_TO_SLICE_MAPPING[query_field]
             tensor = tensor_or_dict[tensor_name]
         elif torch.is_tensor(tensor_or_dict):
             target_tensor_name, slice_ = cls.INPUT_FIELD_TO_SLICE_MAPPING[query_field]
-            assert target_tensor_name == tensor_name
+            if tensor_name is not None:
+                assert target_tensor_name == tensor_name
             tensor = tensor_or_dict
         else:
             raise TypeError
