@@ -15,6 +15,7 @@ from losses import WeightedSum
 from utils import to_device, momentum_accumulator
 from scheduler import GradualWarmupScheduler
 from torch.optim.lr_scheduler import StepLR, ExponentialLR
+from metrics import Metrics
 
 
 class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
@@ -52,10 +53,16 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         self.optim = torch.optim.Adam(
             self.model.parameters(), **self.get("optim/kwargs")
         )
+        self.metrics = Metrics()
 
     def _build_scheduler(self):
         self._base_scheduler = StepLR(self.optim, step_size=10, gamma=0.1)
-        self.scheduler = GradualWarmupScheduler(self.optim, multiplier=1, total_epoch=5, after_scheduler=self._base_scheduler)
+        self.scheduler = GradualWarmupScheduler(
+            self.optim,
+            multiplier=1,
+            total_epoch=5,
+            after_scheduler=self._base_scheduler,
+        )
 
     @property
     def device(self):
@@ -98,22 +105,29 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.next_step()
 
     def validate_epoch(self):
-        all_losses = defaultdict(list)
+        all_losses_and_metrics = defaultdict(list)
+        self.metrics.reset()
         self.model.eval()
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
                 model_output = Dict(self.model(model_input))
                 losses = self.loss(model_input, model_output)
-                all_losses["loss"].append(losses.loss.item())
+                self.metrics.update(model_input, model_output)
+                all_losses_and_metrics["loss"].append(losses.loss.item())
                 for key in losses.unweighted_losses:
-                    all_losses[key].append(losses.unweighted_losses[key].item())
+                    all_losses_and_metrics[key].append(
+                        losses.unweighted_losses[key].item()
+                    )
         # Compute mean for all losses
-        all_losses = Dict({key: np.mean(val) for key, val in all_losses.items()})
-        self.log_validation_losses(all_losses)
+        all_losses_and_metrics = Dict(
+            {key: np.mean(val) for key, val in all_losses_and_metrics.items()}
+        )
+        all_losses_and_metrics.update(Dict(self.metrics.evaluate()))
+        self.log_validation_losses_and_metrics(all_losses_and_metrics)
         # Store the validation loss in cache. This will be used for checkpointing.
-        self.write_to_cache("current_validation_loss", all_losses.loss)
-        return all_losses
+        self.write_to_cache("current_validation_loss", all_losses_and_metrics.loss)
+        return all_losses_and_metrics
 
     def log_training_losses(self, losses):
         if self.log_wandb_now:
@@ -144,7 +158,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             torch.save(info_dict, ckpt_path)
         return self
 
-    def log_validation_losses(self, losses):
+    def log_validation_losses_and_metrics(self, losses):
         metrics = {f"validation_{k}": v for k, v in losses.items()}
         self.wandb_log(**metrics)
         return self
