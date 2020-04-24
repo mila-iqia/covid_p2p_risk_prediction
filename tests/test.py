@@ -92,6 +92,19 @@ class Tests(unittest.TestCase):
         dataset = ContactDataset(path)
         sample = dataset.get(890, 25)
         self.assertIsInstance(sample, Dict)
+        self.assertEqual(
+            dataset.extract(sample, "preexisting_conditions").shape[-1],
+            len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
+        )
+        self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
+        self.assertEqual(dataset.extract(sample, "age").shape[-1], 1)
+        self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
+        self.assertEqual(
+            dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 12
+        )
+        self.assertEqual(
+            dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
+        )
 
 
 if __name__ == "__main__":
