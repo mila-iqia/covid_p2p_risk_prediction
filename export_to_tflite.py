@@ -1,4 +1,6 @@
 import numpy
+import subprocess
+
 import onnx
 from onnx_tf.backend import prepare
 import torch
@@ -67,4 +69,12 @@ print("Mean abs. diff with pytorch model output : %f" % abs_deltas.mean())
 print("Max abs. diff with pytorch model output : %f" % abs_deltas.max())
 
 # Export TF model as frozen inference graph
-tf_model.export_graph('tf_graph2.pb')
+tf_model.export_graph('tf_model.pb')
+
+# Convert the inference graph to TFLite
+tflite_template = "tflite_convert --graph_def_file tf_model.pb --output_file model.tflite --output_format TFLITE --input_arrays %s --output_arrays %s --allow_custom_ops"
+tflite_command = tflite_template % (','.join(input_names), ','.join(output_names))
+subprocess.run(tflite_command, shell=True)
+import pdb; pdb.set_trace()
+
+#tflite_convert --graph_def_file tf_model.pb --output_file model.tflite --output_format TFLITE --input_arrays health_history,history_days,encounter_health,encounter_message,encounter_day,encounter_partner_id,mask --output_arrays 'latent_variable','encounter_variable' --allow_custom_ops
