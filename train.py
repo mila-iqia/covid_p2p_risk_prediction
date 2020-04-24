@@ -90,6 +90,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.log_learning_rates()
             self.train_epoch()
             validation_stats = self.validate_epoch()
+            self.checkpoint()
             self.log_progress("epochs", **validation_stats)
             self.step_scheduler(epoch)
             self.next_epoch()
@@ -172,6 +173,18 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
                 "optim": self.optim.state_dict(),
             }
             torch.save(info_dict, ckpt_path)
+        return self
+
+    def load(self, device=None):
+        ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError
+        info_dict = torch.load(
+            ckpt_path,
+            map_location=torch.device((self.device if device is None else device)),
+        )
+        self.model.load_state_dict(info_dict["model"])
+        self.optim.load_state_dict(info_dict["optim"])
         return self
 
     def log_validation_losses_and_metrics(self, losses):
