@@ -57,7 +57,7 @@ class _ContactTracingTransformer(nn.Module):
             A python dict with the following keys:
                 -> `health_history`: a B(T=14)C tensor of the 14-day health
                     history (symptoms + test results + day) of the individual.
-                -> `health_profile`: a B(T=14)C tensor of the health profile
+                -> `health_profile`: a BC tensor of the health profile
                     containing (age + health + preexisting_conditions) of the
                     individual.
                 -> `history_days`: a B(T=14)1 tensor of the day corresponding to the
@@ -105,20 +105,30 @@ class _ContactTracingTransformer(nn.Module):
         )
         # -------- Self Attention --------
         # Prepare the entities -- one set for the encounters and the other for self health
+        # Before we start, expand health profile from BC to BMC and append to entities
+        expanded_health_profile_per_encounter = embedded_health_profile[
+            :, None, :
+        ].expand(batch_size, num_encounters, embedded_health_profile.shape[-1])
         encounter_entities = torch.cat(
             [
                 embedded_encounter_day,
                 embedded_encounter_partner_ids,
                 embedded_encounter_health,
                 embedded_encounter_messages,
+                expanded_health_profile_per_encounter,
             ],
             dim=-1,
         )
+        # Expand the messages and placeholders from C to BTC
         expanded_message_placeholder = self.message_placeholder[None, None].expand(
             batch_size, num_history_days, embedded_encounter_messages.shape[-1]
         )
         expanded_pid_placeholder = self.partner_id_placeholder[None, None].expand(
             batch_size, num_history_days, embedded_encounter_partner_ids.shape[-1]
+        )
+        # Expand the health profile from C to BTC
+        expanded_health_profile_per_day = embedded_health_profile[:, None, :].expand(
+            batch_size, num_history_days, embedded_health_profile.shape[-1]
         )
         self_entities = torch.cat(
             [
@@ -126,8 +136,9 @@ class _ContactTracingTransformer(nn.Module):
                 expanded_pid_placeholder,
                 embedded_health_history,
                 expanded_message_placeholder,
+                expanded_health_profile_per_day,
             ],
-            dim=2,
+            dim=-1,
         )
         # Concatenate encounter and self entities in to one big set (before passing to
         # the self attention blocks). In addition, expand inputs.mask to account for
@@ -253,6 +264,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             + encounter_partner_id_embedding_dim
             + health_history_embedding_dim
             + message_embedding_dim
+            + health_profile_embedding_dim
         )
         sab_metadata_dim = time_embedding_dim + encounter_partner_id_embedding_dim
         sab_intermediate_in_dim = sab_capacity + sab_metadata_dim
