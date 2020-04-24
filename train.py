@@ -15,6 +15,7 @@ from losses import WeightedSum
 from utils import to_device, momentum_accumulator
 from scheduler import GradualWarmupScheduler
 from torch.optim.lr_scheduler import StepLR, ExponentialLR
+from metrics import Metrics
 
 
 class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
@@ -52,6 +53,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         self.optim = torch.optim.Adam(
             self.model.parameters(), **self.get("optim/kwargs")
         )
+        self.metric = Metrics()
 
     def _build_scheduler(self):
         self._base_scheduler = StepLR(self.optim, step_size=10, gamma=0.1)
@@ -99,12 +101,14 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
 
     def validate_epoch(self):
         all_losses = defaultdict(list)
+        self.metric.reset()
         self.model.eval()
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
                 model_output = Dict(self.model(model_input))
                 losses = self.loss(model_input, model_output)
+                self.metric.update(model_input, model_output)
                 all_losses["loss"].append(losses.loss.item())
                 for key in losses.unweighted_losses:
                     all_losses[key].append(losses.unweighted_losses[key].item())
@@ -113,6 +117,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         self.log_validation_losses(all_losses)
         # Store the validation loss in cache. This will be used for checkpointing.
         self.write_to_cache("current_validation_loss", all_losses.loss)
+        all_metrics = self.metric.evaluate()
         return all_losses
 
     def log_training_losses(self, losses):
