@@ -1,9 +1,9 @@
-device: "cpu"
+device: "cuda"
 
 data:
   paths:
-    train: "./data/0-risks"
-    validate: "./data/1-risks"
+    train: "./data/1k-1-output"
+    validate: "./data/1k-1-output"
   loader_kwargs:
     batch_size: 8
     shuffle: true
@@ -15,7 +15,9 @@ model:
     capacity: 128
     dropout: 0.1
     num_health_history_features: 13
-    health_history_embedding_dim: 64
+    health_history_embedding_dim: 32
+    num_health_profile_features: 7
+    health_profile_embedding_dim: 32
     time_embedding_dim: 32
     num_encounter_partner_id_bits: 16
     encounter_partner_id_embedding_dim: 32
@@ -42,8 +44,18 @@ optim:
   kwargs:
     lr: 0.0001
 
+scheduler:
+  use: false
+  kwargs:
+    eta_min: 0.00001
+  warmup: false
+  warmup_kwargs:
+    multiplier: 1
+    total_epoch: 4
+
 training:
-  num_epochs: 10
+  num_epochs: 20
 
 wandb:
+  use: true
   log_every: 50
