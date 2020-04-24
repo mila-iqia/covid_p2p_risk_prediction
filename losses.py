@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from modules import EntityMasker
+
 
 def get_class(key):
     KEY_CLASS_MAPPING = {
@@ -38,9 +40,12 @@ class ContagionLoss(nn.Module):
         """
         super(ContagionLoss, self).__init__()
         self.allow_multiple_exposures = allow_multiple_exposures
+        self.masker = EntityMasker()
 
     def forward(self, model_input, model_output):
         contagion_logit = model_output.encounter_variables[:, :, 0:1]
+        # Mask with masker (this blocks gradients by multiplying it with 0)
+        self.masker(contagion_logit, model_input.mask)
         B, M, C = contagion_logit.shape
         if self.allow_multiple_exposures:
             # encounter_variables.shape = BM1
