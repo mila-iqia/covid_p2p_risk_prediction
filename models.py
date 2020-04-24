@@ -21,6 +21,7 @@ class _ContactTracingTransformer(nn.Module):
         health_history_embedding: nn.Module,
         health_profile_embedding: nn.Module,
         time_embedding: nn.Module,
+        duration_embedding: nn.Module,
         partner_id_embedding: nn.Module,
         message_embedding: nn.Module,
         self_attention_blocks: nn.ModuleList,
@@ -32,11 +33,13 @@ class _ContactTracingTransformer(nn.Module):
         entity_masker: nn.Module,
         message_placeholder: nn.Parameter,
         partner_id_placeholder: nn.Parameter,
+        duration_placeholder: nn.Parameter,
     ):
         super(_ContactTracingTransformer, self).__init__()
         self.health_history_embedding = health_history_embedding
         self.health_profile_embedding = health_profile_embedding
         self.time_embedding = time_embedding
+        self.duration_embedding = duration_embedding
         self.partner_id_embedding = partner_id_embedding
         self.message_embedding = message_embedding
         self.self_attention_blocks = self_attention_blocks
@@ -48,6 +51,7 @@ class _ContactTracingTransformer(nn.Module):
         self.entity_masker = entity_masker
         self.message_placeholder = message_placeholder
         self.partner_id_placeholder = partner_id_placeholder
+        self.duration_placeholder = duration_placeholder
 
     def forward(self, inputs):
         """
@@ -67,6 +71,9 @@ class _ContactTracingTransformer(nn.Module):
                 -> `encounter_message`: a BMC tensor of the received
                     message from the encounter partner.
                 -> `encounter_day`: a BM1 tensor of the encounter day.
+                -> `encounter_duration`: a BM1 tensor of the encounter duration.
+                    This is not the actual duration, but a proxy (for the number
+                    of encounters)
                 -> `encounter_partner_id`: a binary  BMC tensor specifying
                     the ID of the encounter partner.
                 -> `mask`: a BM1 mask tensor distinguishing the valid entries (1)
@@ -90,10 +97,13 @@ class _ContactTracingTransformer(nn.Module):
         embedded_encounter_health = self.health_history_embedding(
             inputs["encounter_health"], inputs["mask"]
         )
-        # Embed time (days)
+        # Embed time (days and duration)
         embedded_history_days = self.time_embedding(inputs["history_days"])
         embedded_encounter_day = self.time_embedding(
             inputs["encounter_day"], inputs["mask"]
+        )
+        embedded_encounter_duration = self.duration_embedding(
+            inputs["encounter_duration"], inputs["mask"]
         )
         # Embed partner-IDs
         embedded_encounter_partner_ids = self.partner_id_embedding(
@@ -113,6 +123,7 @@ class _ContactTracingTransformer(nn.Module):
             [
                 embedded_encounter_day,
                 embedded_encounter_partner_ids,
+                embedded_encounter_duration,
                 embedded_encounter_health,
                 embedded_encounter_messages,
                 expanded_health_profile_per_encounter,
@@ -126,6 +137,9 @@ class _ContactTracingTransformer(nn.Module):
         expanded_pid_placeholder = self.partner_id_placeholder[None, None].expand(
             batch_size, num_history_days, embedded_encounter_partner_ids.shape[-1]
         )
+        expanded_duration_placeholder = self.duration_placeholder[None, None].expand(
+            batch_size, num_history_days, embedded_encounter_duration.shape[-1]
+        )
         # Expand the health profile from C to BTC
         expanded_health_profile_per_day = embedded_health_profile[:, None, :].expand(
             batch_size, num_history_days, embedded_health_profile.shape[-1]
@@ -134,6 +148,7 @@ class _ContactTracingTransformer(nn.Module):
             [
                 embedded_history_days,
                 expanded_pid_placeholder,
+                expanded_duration_placeholder,
                 embedded_health_history,
                 expanded_message_placeholder,
                 expanded_health_profile_per_day,
@@ -154,7 +169,9 @@ class _ContactTracingTransformer(nn.Module):
         # Grab a copy of the "meta-data", which we will be appending to entities at
         # every step. These meta-data are the time-stamps and partner_ids
         meta_data_dim = (
-            embedded_history_days.shape[2] + embedded_encounter_partner_ids.shape[2]
+            embedded_history_days.shape[2]
+            + embedded_encounter_partner_ids.shape[2]
+            + embedded_encounter_duration.shape[2]
         )
         meta_data = entities[:, :, :meta_data_dim]
         # Let'er rip!
@@ -219,6 +236,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         num_health_profile_features=7,
         health_profile_embedding_dim=32,
         time_embedding_dim=32,
+        encounter_duration_embedding_dim=32,
         num_encounter_partner_id_bits=16,
         encounter_partner_id_embedding_dim=32,
         message_dim=8,
@@ -248,6 +266,9 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             dropout=dropout,
         )
         time_embedding = mods.PositionalEncoding(encoding_dim=time_embedding_dim)
+        duration_embedding = mods.PositionalEncoding(
+            encoding_dim=encounter_duration_embedding_dim
+        )
         partner_id_embedding = mods.PartnerIdEmbedding(
             num_id_bits=num_encounter_partner_id_bits,
             embedding_size=encounter_partner_id_embedding_dim,
@@ -262,11 +283,16 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         sab_in_dim = (
             time_embedding_dim
             + encounter_partner_id_embedding_dim
+            + encounter_duration_embedding_dim
             + health_history_embedding_dim
             + message_embedding_dim
             + health_profile_embedding_dim
         )
-        sab_metadata_dim = time_embedding_dim + encounter_partner_id_embedding_dim
+        sab_metadata_dim = (
+            time_embedding_dim
+            + encounter_partner_id_embedding_dim
+            + encounter_duration_embedding_dim
+        )
         sab_intermediate_in_dim = sab_capacity + sab_metadata_dim
         # Build the SABs
         if num_sabs >= 1:
@@ -332,6 +358,10 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         partner_id_placeholder = nn.Parameter(
             torch.randn((encounter_partner_id_embedding_dim,))
         )
+        # noinspection PyArgumentList
+        duration_placeholder = nn.Parameter(
+            torch.randn((encounter_duration_embedding_dim,))
+        )
         # ------- Masking -------
         entity_masker = mods.EntityMasker()
         # Done; init the super
@@ -339,6 +369,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             health_history_embedding=health_history_embedding,
             health_profile_embedding=health_profile_embedding,
             time_embedding=time_embedding,
+            duration_embedding=duration_embedding,
             partner_id_embedding=partner_id_embedding,
             message_embedding=message_embedding,
             self_attention_blocks=self_attention_blocks,
@@ -350,4 +381,5 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             entity_masker=entity_masker,
             message_placeholder=message_placeholder,
             partner_id_placeholder=partner_id_placeholder,
+            duration_placeholder=duration_placeholder,
         )
