@@ -25,6 +25,12 @@ class ContactDataset(Dataset):
         "encounter_is_contagion",
     ]
 
+    SEQUENCE_VALUED_FIELDS = [
+        "health_history",
+        "infectiousness_history",
+        "history_days",
+    ]
+
     INPUT_FIELD_TO_SLICE_MAPPING = {
         "health_history": ("health_history", slice(None)),
         "reported_symptoms": ("health_history", slice(0, 12)),
@@ -261,7 +267,9 @@ class ContactDataset(Dataset):
         if age == 0:
             age = -1
         else:
-            age = (age - self.ASSUMED_MIN_AGE) / (self.ASSUMED_MAX_AGE - self.ASSUMED_MIN_AGE)
+            age = (age - self.ASSUMED_MIN_AGE) / (
+                self.ASSUMED_MAX_AGE - self.ASSUMED_MIN_AGE
+            )
         return np.array([age])
 
     def __getitem__(self, item):
