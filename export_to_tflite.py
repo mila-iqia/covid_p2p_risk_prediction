@@ -7,6 +7,8 @@ import torch.onnx
 from models import ContactTracingTransformer
 from loader import get_dataloader
 
+NB_EXAMPLES_FOR_SANITY_CHECK=500
+
 # Load pytorch model
 pytorch_model = ContactTracingTransformer()
 pytorch_model.load_state_dict(torch.load("models/model.pth"))
@@ -22,7 +24,8 @@ input_names=[]
 for i in batch:
     input_names.append(i)
 output_names = ['encounter_variables', 'latent_variable']
- 
+
+print(input_names)
 # Convert PyTorch model to ONNX format 
 torch.onnx.export(pytorch_model,            
                   batch,                         
@@ -31,32 +34,37 @@ torch.onnx.export(pytorch_model,
                   opset_version=10,          
                   do_constant_folding=True,  
                   input_names=input_names,  
-                  output_names=output_names) 
-
+                  output_names=output_names,
+                  dynamic_axes={
+                    'mask' : {1: 'sequence'},
+                    'encounter_health' : {1: 'sequence'},
+                    'encounter_message' : {1: 'sequence'},
+                    'encounter_day' : {1: 'sequence'},
+                    'encounter_partner_id' : {1: 'sequence'}
+                  }) 
                   
 # Load ONNX model and convert to TF model
 onnx_model = onnx.load("model_onnx_10.onnx")  
 tf_model = prepare(onnx_model)
 
 # Sanity-check the TF model
-deltas = None
+deltas = []
 for i, batch in enumerate(iter(dataloader)):
-    print([x.shape for x in batch.values()])
     pytorch_output = pytorch_model(batch)
     tf_output = tf_model.run(batch)
     
     for k in pytorch_output.keys():
         k_delta = pytorch_output[k].detach().numpy() - getattr(tf_output, k)
-        if deltas is None:
-            deltas = k_delta
-        else:
-            deltas = numpy.hstack((deltas, k_delta))
-    print(deltas.size)
+        deltas.append(k_delta)
     
+    if i >= NB_EXAMPLES_FOR_SANITY_CHECK:
+        break # Limit the testing to avoid spending too much time on it.
+
+abs_deltas = numpy.abs(numpy.hstack(deltas))
 print("Tensorflow Model sanity check")
-print("Min diff with pytorch model output : %f" % deltas.min())
-print("Mean diff with pytorch model output : %f" % deltas.mean())
-print("Max diff with pytorch model output : %f" % deltas.max())
+print("Min abs. diff with pytorch model output : %f" % abs_deltas.min())
+print("Mean abs. diff with pytorch model output : %f" % abs_deltas.mean())
+print("Max abs. diff with pytorch model output : %f" % abs_deltas.max())
 
 # Export TF model as frozen inference graph
 tf_model.export_graph('tf_graph2.pb')
