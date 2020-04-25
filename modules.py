@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from utils import thermometer_encoding
+
 
 class HealthHistoryEmbedding(nn.Sequential):
     def __init__(self, in_features, embedding_size, capacity=128, dropout=0.1):
@@ -47,6 +49,36 @@ class PartnerIdEmbedding(nn.Linear):
         if mask is not None:
             output = output * mask[:, :, None]
         return output
+
+
+class DurationEmbedding(HealthHistoryEmbedding):
+    EPS = 0.0001
+
+    def __init__(
+        self,
+        embedding_size,
+        num_thermo_bins=32,
+        capacity=128,
+        dropout=0.1,
+        thermo_range=(0.0, 6.0),
+    ):
+        super(DurationEmbedding, self).__init__(
+            in_features=num_thermo_bins,
+            embedding_size=embedding_size,
+            capacity=capacity,
+            dropout=dropout,
+        )
+        self.num_thermo_bins = num_thermo_bins
+        self.thermo_range = thermo_range
+
+    def forward(self, input, mask=None):
+        assert input.shape[-1] == 1
+        encoded_input = thermometer_encoding(
+            torch.log(input + self.EPS),
+            value_range=self.thermo_range,
+            size=self.num_thermo_bins,
+        )
+        return super(DurationEmbedding, self).forward(encoded_input, mask)
 
 
 class EntityMasker(nn.Module):
