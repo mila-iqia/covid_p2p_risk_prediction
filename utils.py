@@ -26,7 +26,7 @@ def thermometer_encoding(x: torch.Tensor, value_range: Sequence[int], size: int)
     assert x.shape[-1] == 1
     # Make linspace and expand it to shape (1, ..., 1, size), with trailing n-1
     # singleton dimensions, where x.ndim = n.
-    expanded_linspace = torch.linspace(value_range[0], value_range[1], size).expand(
-        *([1] * (x.dim() - 1) + [size])
-    )
+    expanded_linspace = torch.linspace(
+        value_range[0], value_range[1], size, dtype=x.dtype, device=x.device
+    ).expand(*([1] * (x.dim() - 1) + [size]))
     return torch.gt(x, expanded_linspace).float()
