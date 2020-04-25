@@ -59,7 +59,7 @@ class ContactDataset(Dataset):
     DEFAULT_ENCOUNTER_DURATION = 10
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0]
 
-    def __init__(self, path: str, relative_days=True):
+    def __init__(self, path: str, relative_days=True, bit_encoded_age=True):
         """
         Parameters
         ----------
@@ -71,12 +71,15 @@ class ContactDataset(Dataset):
             as negative values, i.e. day = -2 means the day before yesterday.
             If set to False, the time-stamps show the true number of days since
             day 0 (e.g. "today" can be represented as say 15).
+        bit_encoded_age : bool
+            Whether the age is to be encoded as a vector of bits or as a float between
         """
         # Private
         self._num_id_bits = 16
         # Public
         self.path = path
         self.relative_days = relative_days
+        self.bit_encoded_age = bit_encoded_age
         # Prepwork
         self._read_data()
 
@@ -129,12 +132,18 @@ class ContactDataset(Dataset):
             An addict with the following attributes:
                 -> `health_history`: 14-day health history of self of shape (14, 13)
                         with channels `reported_symptoms` (12), `test_results`(1).
-                -> `health_profile`: health profile of the individual of shape (14,)
-                        with channels `age` (8), `sex` (1), and
+                -> `health_profile`: health profile of the individual, 
+                    of shape (14,) or (7,) depending on whether `bit_encoded_age` is 
+                    set to True (former) or not (latter). If `bit_encoded_age`: 
+                        We have  channels `age` (8), `sex` (1), and
                         `preexisting_conditions` (5,). The `age` has 8 channels because
                         we represent the corresponding integer in 8-bit binary. If the
                         age is not available (= 0), it is represented as a size-8 vector
                         of -1.
+                    If not: 
+                        Same as above, but `age` is now simply a float taking values in
+                        Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to age 100, 
+                        whereas {-1} corresponds to the case where age is not available.  
                 -> `history_days`: time-stamps to go with the health_history.
                 -> `current_compartment`: current epidemic compartment (S/E/I/R)
                     of shape (4,).
@@ -274,10 +283,19 @@ class ContactDataset(Dataset):
 
     def _fetch_age(self, human_day_info):
         age = human_day_info["observed"].get("age", self.DEFAULT_AGE)
-        if age == 0:
-            age = np.array([-1] * 8).astype("int")
+        if self.bit_encoded_age:
+            if age == 0:
+                age = np.array([-1] * 8).astype("int")
+            else:
+                age = np.unpackbits(np.array([age]).astype("uint8")).astype("int")
         else:
-            age = np.unpackbits(np.array([age]).astype("uint8")).astype("int")
+            if age == 0:
+                age = np.array([-1.0])
+            else:
+                age = (age - self.ASSUMED_MIN_AGE) / (
+                    self.ASSUMED_MAX_AGE - self.ASSUMED_MIN_AGE
+                )
+                age = np.array([age])
         return age
 
     def __getitem__(self, item):
