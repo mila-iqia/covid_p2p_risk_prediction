@@ -97,7 +97,7 @@ class Tests(unittest.TestCase):
             len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
         )
         self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
-        self.assertEqual(dataset.extract(sample, "age").shape[-1], 1)
+        self.assertEqual(dataset.extract(sample, "age").shape[-1], 8)
         self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
         self.assertEqual(
             dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 12

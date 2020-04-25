@@ -35,9 +35,9 @@ class ContactDataset(Dataset):
         "health_history": ("health_history", slice(None)),
         "reported_symptoms": ("health_history", slice(0, 12)),
         "test_results": ("health_history", slice(12, 13)),
-        "age": ("health_profile", slice(0, 1)),
-        "sex": ("health_profile", slice(1, 2)),
-        "preexisting_conditions": ("health_profile", slice(2, 7)),
+        "age": ("health_profile", slice(0, 8)),
+        "sex": ("health_profile", slice(8, 9)),
+        "preexisting_conditions": ("health_profile", slice(9, 14)),
         "history_days": ("history_days", slice(None)),
         "current_compartment": ("current_compartment", slice(None)),
         "infectiousness_history": ("infectiousness_history", slice(None)),
@@ -54,6 +54,7 @@ class ContactDataset(Dataset):
     DEFAULT_AGE = 0
     ASSUMED_MAX_AGE = 100
     ASSUMED_MIN_AGE = 1
+    AGE_NOT_AVAILABLE = 0
     DEFAULT_SEX = 0
     DEFAULT_ENCOUNTER_DURATION = 10
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -125,9 +126,12 @@ class ContactDataset(Dataset):
             An addict with the following attributes:
                 -> `health_history`: 14-day health history of self of shape (14, 13)
                         with channels `reported_symptoms` (12), `test_results`(1).
-                -> `health_profile`: health profile of the individual of shape (7,)
-                        with channels `age` (1), `sex` (1), and
-                        `preexisting_conditions` (5,).
+                -> `health_profile`: health profile of the individual of shape (14,)
+                        with channels `age` (8), `sex` (1), and
+                        `preexisting_conditions` (5,). The `age` has 8 channels because
+                        we represent the corresponding integer in 8-bit binary. If the
+                        age is not available (= 0), it is represented as a size-8 vector
+                        of -1.
                 -> `history_days`: time-stamps to go with the health_history.
                 -> `current_compartment`: current epidemic compartment (S/E/I/R)
                     of shape (4,).
@@ -265,12 +269,10 @@ class ContactDataset(Dataset):
     def _fetch_age(self, human_day_info):
         age = human_day_info["observed"].get("age", self.DEFAULT_AGE)
         if age == 0:
-            age = -1
+            age = np.array([-1] * 8).astype("int")
         else:
-            age = (age - self.ASSUMED_MIN_AGE) / (
-                self.ASSUMED_MAX_AGE - self.ASSUMED_MIN_AGE
-            )
-        return np.array([age])
+            age = np.unpackbits(np.array([age]).astype("uint8")).astype("int")
+        return age
 
     def __getitem__(self, item):
         human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
