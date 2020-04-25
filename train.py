@@ -155,7 +155,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.wandb_log(**metrics)
         return self
 
-    def checkpoint(self, force=True):
+    def checkpoint(self, force=False):
         current_validation_loss = self.read_from_cache(
             "current_validation_loss", float("inf")
         )
@@ -164,6 +164,8 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         )
         if current_validation_loss < best_validation_loss:
             self.write_to_cache("best_validation_loss", current_validation_loss)
+            ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
+        elif self.get_arg("force_checkpoint", force):
             ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
         else:
             ckpt_path = None
