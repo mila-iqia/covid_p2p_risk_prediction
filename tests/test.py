@@ -4,7 +4,7 @@ import unittest
 class Tests(unittest.TestCase):
 
     DATASET_PATH = "../data/1k-1-output"
-    NUM_KEYS_IN_BATCH = 12
+    NUM_KEYS_IN_BATCH = 13
 
     def test_model(self):
         from loader import ContactDataset
@@ -90,7 +90,7 @@ class Tests(unittest.TestCase):
 
         path = self.DATASET_PATH
         dataset = ContactDataset(path)
-        sample = dataset.get(890, 25)
+        sample = dataset.get(890, 5)
         self.assertIsInstance(sample, Dict)
         self.assertEqual(
             dataset.extract(sample, "preexisting_conditions").shape[-1],

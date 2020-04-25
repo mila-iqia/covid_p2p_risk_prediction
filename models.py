@@ -76,11 +76,13 @@ class _ContactTracingTransformer(nn.Module):
                     of encounters)
                 -> `encounter_partner_id`: a binary  BMC tensor specifying
                     the ID of the encounter partner.
-                -> `mask`: a BM1 mask tensor distinguishing the valid entries (1)
+                -> `mask`: a BM mask tensor distinguishing the valid entries (1)
                     from padding (0) in the set valued inputs.
+                -> `valid_history_mask`: a B(14) mask tensor distinguising valid
+                    points in history (1) from padding (0).
         Returns
         -------
-        Dict
+        dict
         """
         # -------- Shape Wrangling --------
         batch_size = inputs["health_history"].shape[0]
@@ -89,7 +91,7 @@ class _ContactTracingTransformer(nn.Module):
         # -------- Embeddings --------
         # Embed health history
         embedded_health_history = self.health_history_embedding(
-            inputs["health_history"]
+            inputs["health_history"], inputs["valid_history_mask"]
         )
         embedded_health_profile = self.health_profile_embedding(
             inputs["health_profile"]
@@ -98,7 +100,9 @@ class _ContactTracingTransformer(nn.Module):
             inputs["encounter_health"], inputs["mask"]
         )
         # Embed time (days and duration)
-        embedded_history_days = self.time_embedding(inputs["history_days"])
+        embedded_history_days = self.time_embedding(
+            inputs["history_days"], inputs["valid_history_mask"]
+        )
         embedded_encounter_day = self.time_embedding(
             inputs["encounter_day"], inputs["mask"]
         )
@@ -159,12 +163,7 @@ class _ContactTracingTransformer(nn.Module):
         # the self attention blocks). In addition, expand inputs.mask to account for
         # masking the entire set of entities.
         entities = torch.cat([encounter_entities, self_entities], dim=1)
-        extra_mask = torch.ones(
-            size=(batch_size, num_history_days),
-            dtype=inputs["mask"].dtype,
-            device=inputs["mask"].device,
-        )
-        expanded_mask = torch.cat([inputs["mask"], extra_mask], dim=1)
+        expanded_mask = torch.cat([inputs["mask"], inputs["valid_history_mask"]], dim=1)
         entities = self.entity_masker(entities, expanded_mask)
         # Grab a copy of the "meta-data", which we will be appending to entities at
         # every step. These meta-data are the time-stamps and partner_ids

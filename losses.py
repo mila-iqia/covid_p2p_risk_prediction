@@ -17,14 +17,24 @@ def get_class(key):
 
 
 class InfectiousnessLoss(nn.Module):
+    def __init__(self):
+        super(InfectiousnessLoss, self).__init__()
+        self.masker = EntityMasker()
+
     def forward(self, model_input, model_output):
         assert model_output.latent_variable.dim() == 3, (
             "Infectiousness Loss can only be used on (temporal) "
             "set-valued latent variables."
         )
-        return F.mse_loss(
-            model_output.latent_variable[:, :, 0:1], model_input.infectiousness_history
+        # This will block gradients to the entities that are invalid
+        prediction = self.masker(
+            model_output.latent_variable[:, :, 0:1], model_input["valid_history_mask"]
         )
+        with torch.no_grad():
+            target = self.masker(
+                model_input.infectiousness_history, model_input["valid_history_mask"]
+            )
+        return F.mse_loss(prediction, target)
 
 
 class ContagionLoss(nn.Module):

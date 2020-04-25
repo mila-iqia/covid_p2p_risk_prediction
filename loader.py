@@ -29,6 +29,7 @@ class ContactDataset(Dataset):
         "health_history",
         "infectiousness_history",
         "history_days",
+        "valid_history_mask",
     ]
 
     INPUT_FIELD_TO_SLICE_MAPPING = {
@@ -39,6 +40,7 @@ class ContactDataset(Dataset):
         "sex": ("health_profile", slice(8, 9)),
         "preexisting_conditions": ("health_profile", slice(9, 14)),
         "history_days": ("history_days", slice(None)),
+        "valid_history_mask": ("valid_history_mask", slice(None)),
         "current_compartment": ("current_compartment", slice(None)),
         "infectiousness_history": ("infectiousness_history", slice(None)),
         "reported_symptoms_at_encounter": ("encounter_health", slice(0, 12)),
@@ -59,7 +61,9 @@ class ContactDataset(Dataset):
     DEFAULT_ENCOUNTER_DURATION = 10
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0]
 
-    def __init__(self, path: str, relative_days=True, bit_encoded_age=True):
+    def __init__(
+        self, path: str, relative_days=True, bit_encoded_age=True, clip_history_days=True,
+    ):
         """
         Parameters
         ----------
@@ -72,7 +76,12 @@ class ContactDataset(Dataset):
             If set to False, the time-stamps show the true number of days since
             day 0 (e.g. "today" can be represented as say 15).
         bit_encoded_age : bool
-            Whether the age is to be encoded as a vector of bits or as a float between
+            Whether the age is to be encoded as a vector of bits or as a
+            float between (0, 1). Invalid ages are encoded as -1.
+        clip_history_days : bool
+            Whether `history_days` (in the output) clips to the equivalent of
+            day 0 for days that predate records. E.g. in day 5, whether
+            `history_days[10]` is -5 (True) or -10 (False).
         """
         # Private
         self._num_id_bits = 16
@@ -80,6 +89,7 @@ class ContactDataset(Dataset):
         self.path = path
         self.relative_days = relative_days
         self.bit_encoded_age = bit_encoded_age
+        self.clip_history_days = clip_history_days
         # Prepwork
         self._read_data()
 
@@ -144,7 +154,10 @@ class ContactDataset(Dataset):
                         Same as above, but `age` is now simply a float taking values in
                         Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to age 100, 
                         whereas {-1} corresponds to the case where age is not available.  
-                -> `history_days`: time-stamps to go with the health_history.
+                -> `history_days`: time-stamps to go with the health_history,
+                    of shape (14, 1).
+                -> `valid_history_mask`: 1 if the time-stamp corresponds to a valid
+                    point in history, 0 otherwise, of shape (14,).
                 -> `current_compartment`: current epidemic compartment (S/E/I/R)
                     of shape (4,).
                 -> `infectiousness_history`: 14-day history of infectiousness,
@@ -231,9 +244,8 @@ class ContactDataset(Dataset):
             axis=1,
         )
         infectiousness_history = human_day_info["unobserved"]["infectiousness"][:, None]
-        history_days = np.clip(np.arange(day_idx - 13, day_idx + 1), 0, None)[
-            ::-1, None
-        ]
+        history_days = np.arange(day_idx - 13, day_idx + 1)[::-1, None]
+        valid_history_mask = (history_days >= 0)[:, 0]
         # Get historical health info given the day of encounter (shape = (M, 13))
         encounter_at_historical_day_idx = np.argmax(
             encounter_day == history_days, axis=0
@@ -262,6 +274,9 @@ class ContactDataset(Dataset):
             "preexisting_conditions", np.array(self.DEFAULT_PREEXISTING_CONDITIONS)
         )
         health_profile = np.concatenate([age, sex, preexsting_conditions])
+        # Clip history days if required
+        if self.clip_history_days:
+            history_days = np.clip(history_days, 0, None)
         # Normalize both days to assign 0 to present
         if self.relative_days:
             history_days = history_days - day_idx
@@ -272,6 +287,7 @@ class ContactDataset(Dataset):
             health_profile=torch.from_numpy(health_profile).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
             history_days=torch.from_numpy(history_days).float(),
+            valid_history_mask=torch.from_numpy(valid_history_mask).float(),
             current_compartment=torch.from_numpy(current_compartment).float(),
             encounter_health=torch.from_numpy(health_at_encounter).float(),
             encounter_message=torch.from_numpy(encounter_message).float(),
