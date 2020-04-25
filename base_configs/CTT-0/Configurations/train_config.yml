@@ -18,6 +18,9 @@ model:
     health_history_embedding_dim: 32
     num_health_profile_features: 14
     health_profile_embedding_dim: 32
+    encounter_duration_embedding_mode: "thermo"
+    encounter_duration_thermo_range: [0.0, 6.0]
+    encounter_duration_num_thermo_bins: 32
     time_embedding_dim: 32
     encounter_duration_embedding_dim: 32
     num_encounter_partner_id_bits: 16
