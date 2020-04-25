@@ -111,7 +111,7 @@ class ContactDataset(Dataset):
         with open(file_name, "rb") as f:
             return pickle.load(f)
 
-    def get(self, human_idx: int, day_idx: int) -> Dict:
+    def get(self, human_idx: int, day_idx: int, human_day_info: dict = None) -> Dict:
         """
         Parameters
         ----------
@@ -119,6 +119,9 @@ class ContactDataset(Dataset):
             Index specifying the human
         day_idx : int
             Index of the day
+        human_day_info : dict
+            If provided, use this dictionary instead of the content of the
+            pickle file (which is read from file).
 
         Returns
         -------
@@ -147,7 +150,10 @@ class ContactDataset(Dataset):
                 -> `encounter_day`: the day of encounter, of shape (M, 1)
                 -> `encounter_is_contagion`: whether the encounter was a contagion.
         """
-        human_day_info = self.read(human_idx, day_idx)
+        if human_day_info is None:
+            human_day_info = self.read(human_idx, day_idx)
+        else:
+            day_idx = human_day_info["current_day"]
         # -------- Encounters --------
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.
@@ -352,6 +358,31 @@ class ContactDataset(Dataset):
         else:
             raise TypeError
         return tensor[..., slice_]
+
+
+class ContactPreprocessor(ContactDataset):
+    def __init__(self, **kwargs):
+        # noinspection PyTypeChecker
+        super(ContactPreprocessor, self).__init__(path=None, **kwargs)
+        self._num_humans = 1
+        self._num_days = 1
+
+    def _read_data(self):
+        # Defuse this method since it's not needed anymore
+        pass
+
+    def preprocess(self, human_day_info, as_batch=True):
+        # noinspection PyTypeChecker
+        sample = self.get(None, None, human_day_info=human_day_info)
+        if as_batch:
+            sample = self.collate_fn([sample])
+        return sample
+
+    def __len__(self):
+        raise NotImplementedError
+
+    def __getitem__(self, item):
+        raise NotImplementedError
 
 
 def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
