@@ -1,0 +1,56 @@
+data:
+  loader_kwargs:
+    batch_size: 8
+    num_workers: 1
+    relative_days: true
+    shuffle: true
+  paths:
+    train: ./data/1k-1-output
+    validate: ./data/1k-1-output
+device: cpu
+git_rev: bda81ec36ece3b1204e2eeef88c8115533a6f46a
+losses:
+  kwargs:
+    contagion:
+      allow_multiple_exposures: true
+    infectiousness: {}
+  weights:
+    contagion: 1.0
+    infectiousness: 1.0
+model:
+  kwargs:
+    capacity: 128
+    dropout: 0.1
+    encounter_duration_embedding_dim: 32
+    encounter_output_features: 1
+    encounter_partner_id_embedding_dim: 32
+    health_history_embedding_dim: 32
+    health_profile_embedding_dim: 32
+    latent_variable_output_features: 1
+    message_dim: 8
+    message_embedding_dim: 32
+    num_encounter_partner_id_bits: 16
+    num_heads: 4
+    num_health_history_features: 13
+    num_health_profile_features: 14
+    num_sabs: 2
+    pool_latent_entities: false
+    sab_capacity: 128
+    time_embedding_dim: 32
+    use_logit_sink: false
+optim:
+  kwargs:
+    lr: 0.0001
+scheduler:
+  kwargs:
+    eta_min: 1.0e-05
+  use: false
+  warmup: false
+  warmup_kwargs:
+    multiplier: 1
+    total_epoch: 4
+training:
+  num_epochs: 20
+wandb:
+  log_every: 50
+  use: true
