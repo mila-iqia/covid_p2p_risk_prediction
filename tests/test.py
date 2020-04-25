@@ -146,6 +146,10 @@ class Tests(unittest.TestCase):
                                  remote_output["contagion_proba"].shape)
                 self.assertEqual(local_output["infectiousness"].shape,
                                  remote_output["infectiousness"].shape)
+                self.assertTrue(np.isclose(local_output["contagion_proba"],
+                                           remote_output["contagion_proba"]).all())
+                self.assertTrue(np.isclose(local_output["infectiousness"],
+                                           remote_output["infectiousness"]).all())
         for s in servers:
             s.stop()
             s.join()
