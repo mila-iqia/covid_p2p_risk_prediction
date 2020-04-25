@@ -1,15 +1,20 @@
 import numpy
+import os
+import shutil
 import subprocess
 
 import onnx
 from onnx_tf.backend import prepare
 import torch
 import torch.onnx
+import tensorflow as tf
+from tensorflow.python.saved_model import signature_constants
+from tensorflow.python.saved_model import tag_constants
 
 from models import ContactTracingTransformer
 from loader import get_dataloader
 
-NB_EXAMPLES_FOR_SANITY_CHECK=500
+NB_EXAMPLES_FOR_SANITY_CHECK=5
 
 # Load pytorch model
 pytorch_model = ContactTracingTransformer()
@@ -17,7 +22,7 @@ pytorch_model.load_state_dict(torch.load("models/model.pth"))
 pytorch_model.eval()
 
 # Load dataset (used for sanity checking the converted models)
-path = "output.pkl"
+path = "./data/"
 dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0, path=path)
 batch = next(iter(dataloader))
 
@@ -28,6 +33,7 @@ for i in batch:
 output_names = ['encounter_variables', 'latent_variable']
 
 print(input_names)
+import pdb; pdb.set_trace()
 # Convert PyTorch model to ONNX format 
 torch.onnx.export(pytorch_model,            
                   batch,                         
@@ -38,11 +44,18 @@ torch.onnx.export(pytorch_model,
                   input_names=input_names,  
                   output_names=output_names,
                   dynamic_axes={
-                    'mask' : {1: 'sequence'},
-                    'encounter_health' : {1: 'sequence'},
-                    'encounter_message' : {1: 'sequence'},
-                    'encounter_day' : {1: 'sequence'},
-                    'encounter_partner_id' : {1: 'sequence'}
+                    'mask' : {0: 'batch_size', 1: 'sequence'},
+                    'health_history' : {0: 'batch_size'},
+                    'health_profile' : {0: 'batch_size'},
+                    'infectiousness_history' : {0: 'batch_size'},
+                    'history_days' : {0: 'batch_size'},
+                    'current_compartment' : {0: 'batch_size'},
+                    'encounter_health' : {0: 'batch_size', 1: 'sequence'},
+                    'encounter_message' : {0: 'batch_size', 1: 'sequence'},
+                    'encounter_day' : {0: 'batch_size', 1: 'sequence'},
+                    'encounter_partner_id' : {0: 'batch_size', 1: 'sequence'},
+                    'encounter_duration' : {0: 'batch_size', 1: 'sequence'},
+                    'encounter_is_contagion' : {0: 'batch_size', 1: 'sequence'}
                   }) 
                   
 # Load ONNX model and convert to TF model
@@ -71,10 +84,56 @@ print("Max abs. diff with pytorch model output : %f" % abs_deltas.max())
 # Export TF model as frozen inference graph
 tf_model.export_graph('tf_model.pb')
 
-# Convert the inference graph to TFLite
-tflite_template = "tflite_convert --graph_def_file tf_model.pb --output_file model.tflite --output_format TFLITE --input_arrays %s --output_arrays %s --allow_custom_ops"
-tflite_command = tflite_template % (','.join(input_names), ','.join(output_names))
-subprocess.run(tflite_command, shell=True)
+# Convert the tf graph to a TF Saved Model
+save_dir = "./tmp_tfmodel_conversion/"
+if os.path.isdir(save_dir):
+    print('Already saved a model, cleaning up')
+    shutil.rmtree(save_dir, ignore_errors=True)
+
+builder = tf.compat.v1.saved_model.builder.SavedModelBuilder(save_dir)
+with tf.compat.v1.Session(graph=tf_model.graph) as sess:
+    
+    input_spec = {}
+    output_spec = {}
+    for name in tf_model.inputs:
+        input_spec[name] = tf_model.tensor_dict[name]
+    for name in output_names:
+        output_spec[name] = tf_model.tensor_dict[name]
+    
+    sigs = {signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY :
+            tf.compat.v1.saved_model.signature_def_utils.predict_signature_def(input_spec, output_spec)}
+            
+    builder.add_meta_graph_and_variables(sess,
+                                         [tag_constants.SERVING],
+                                         signature_def_map=sigs)
+    builder.save()
+
+
+# Convert Saved Model to TFLite model
+converter = tf.lite.TFLiteConverter.from_saved_model(save_dir)
+import pdb; pdb.set_trace()
+tflite_model = converter.convert()
+open("model.tflite", "wb").write(tflite_model)
+
+# Sanity-check the TFLite model
+
+interpreter = tf.lite.Interpreter(model_path="model.tflite")
+interpreter.allocate_tensors()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 import pdb; pdb.set_trace()
 
-#tflite_convert --graph_def_file tf_model.pb --output_file model.tflite --output_format TFLITE --input_arrays health_history,history_days,encounter_health,encounter_message,encounter_day,encounter_partner_id,mask --output_arrays 'latent_variable','encounter_variable' --allow_custom_ops
+# Test model on random input data.
+input_shape = input_details[0]['shape']
+input_data = np.array(np.random.random_sample(input_shape), dtype=np.float32)
+interpreter.set_tensor(input_details[0]['index'], input_data)
+
+interpreter.invoke()
+
+# The function `get_tensor()` returns a copy of the tensor data.
+# Use `tensor()` in order to get a pointer to the tensor.
+output_data = interpreter.get_tensor(output_details[0]['index'])
+print(output_data)
+
+import pdb; pdb.set_trace()
+
