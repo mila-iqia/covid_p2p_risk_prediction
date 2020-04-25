@@ -5,3 +5,4 @@ addict
 tensorflow==1.15.2
 onnx==1.6
 onnx-tf
+pyzmq
