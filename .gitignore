@@ -1,0 +1,19 @@
+# python cache files & build results
+__pycache__
+
+# IDE-related files/directories
+.idea
+.vscode
+*.swp
+
+# env-related files/directories
+.venv
+.env
+venv
+env
+
+# data-related files/directories
+/data
+/tmp
+
+
