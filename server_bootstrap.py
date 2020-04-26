@@ -4,6 +4,7 @@ import argparse
 import functools
 import os
 import signal
+import sys
 import time
 
 import server_utils
@@ -49,6 +50,7 @@ def interrupt_handler(signal, frame, servers):
         s.stop()
         s.join()
     print("All done.")
+    sys.exit(0)
 
 
 def main(args=None):
