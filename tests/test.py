@@ -133,16 +133,17 @@ class Tests(unittest.TestCase):
         import numpy as np
         import infer
         import loader
+        import server_utils
 
         # this should automatically load-balance inference across servers; see:
         # https://learning-0mq-with-pyzmq.readthedocs.io/en/latest/pyzmq/multiprocess/multiprocess.html
         test_ports = [6688, 6689, 6690]
         servers = [
-            infer.InferenceServer(self.EXPERIMENT_PATH, port) for port in test_ports
+            server_utils.InferenceServer(self.EXPERIMENT_PATH, port) for port in test_ports
         ]
         _ = [s.start() for s in servers]
         local_engine = infer.InferenceEngine(self.EXPERIMENT_PATH)
-        remote_engine = infer.InferenceClient(test_ports, "localhost")
+        remote_engine = server_utils.InferenceClient(test_ports, "localhost")
         dataset = loader.ContactDataset(self.DATASET_PATH)
         for _ in range(1000):
             hdi, local_output = None, None
