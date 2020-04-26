@@ -3,7 +3,7 @@ import numpy as np
 import operator
 from collections import defaultdict
 from scipy.stats import wasserstein_distance as dist
-import config
+#import config
 from frozen.utils import Message, decode_message, encode_message, decode_update_message, hash_to_cluster, compare_uids
 
 class Clusters:
@@ -139,9 +139,9 @@ class Clusters:
     def update_records(self, update_messages, human):
         # if we're using naive tracing, we actually don't care which records we update
 
-        if not config.CLUSTER_MESSAGES and config.CLUSTER_TYPE == "heuristic":
-            for update_message in update_messages:
-                self.clusters_by_day
+        #if not config.CLUSTER_MESSAGES and config.CLUSTER_TYPE == "heuristic":
+        #    for update_message in update_messages:
+        #        self.clusters_by_day
         if not update_messages:
             return self
         grouped_update_messages = self.group_by_received_at(update_messages)
