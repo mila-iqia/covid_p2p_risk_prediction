@@ -6,7 +6,7 @@ from typing import Union
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 from torch.utils.data.dataloader import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
@@ -62,7 +62,11 @@ class ContactDataset(Dataset):
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0]
 
     def __init__(
-        self, path: str, relative_days=True, bit_encoded_age=True, clip_history_days=True,
+        self,
+        path: str,
+        relative_days=True,
+        bit_encoded_age=True,
+        clip_history_days=True,
     ):
         """
         Parameters
@@ -420,7 +424,15 @@ class ContactPreprocessor(ContactDataset):
 
 
 def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
-    dataset = ContactDataset(**dataset_kwargs)
+    path = dataset_kwargs.pop("path")
+    if isinstance(path, str):
+        dataset = ContactDataset(path=path, **dataset_kwargs)
+    elif isinstance(path, (list, tuple)):
+        dataset = ConcatDataset(
+            [ContactDataset(path=p, **dataset_kwargs) for p in path]
+        )
+    else:
+        raise TypeError
     dataloader = DataLoader(
         dataset=dataset,
         batch_size=batch_size,

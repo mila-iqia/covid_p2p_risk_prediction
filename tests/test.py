@@ -70,6 +70,10 @@ class Tests(unittest.TestCase):
         keys_in_batch = list(batch.keys())
         for key in keys_in_batch:
             self.assertEqual(len(batch[key]), batch_size)
+        dataloader = get_dataloader(
+            batch_size=batch_size, shuffle=False, num_workers=0, path=[path, path]
+        )
+        batch = next(iter(dataloader))
 
     def test_loader_with_multiprocessing(self):
         from loader import get_dataloader
