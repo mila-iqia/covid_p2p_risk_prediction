@@ -1,5 +1,8 @@
 """Contains utility classes for remote inference inside the simulation."""
 
+import datetime
+import numpy as np
+import os
 import pickle
 import threading
 import typing
@@ -7,6 +10,15 @@ import zmq
 
 from infer import InferenceEngine
 from loader import InvalidSetSize
+
+expected_raw_packet_param_names = [
+    "start", "current_day", "all_possible_symptoms", "human",
+    "save_training_data", "log_path"
+]
+
+expected_processed_packet_param_names = [
+    "current_day", "observed", "unobserved"
+]
 
 
 class InferenceServer(threading.Thread):
@@ -51,6 +63,8 @@ class InferenceServer(threading.Thread):
                 hdi = pickle.loads(socket.recv())
                 output = None
                 try:
+                    if len(hdi) != len(expected_processed_packet_param_names):
+                        hdi = proc_human(hdi)
                     output = engine.infer(hdi)
                 except InvalidSetSize:
                     pass  # return None for invalid samples
@@ -92,3 +106,54 @@ class InferenceClient:
         """Forwards a data sample for the inference engine using pickle."""
         self.socket.send(pickle.dumps(sample))
         return pickle.loads(self.socket.recv())
+
+
+def proc_human(params):
+    """(Pre-)Processes the received simulator data for a single human."""
+    import frozen.helper
+    assert isinstance(params, dict) and all([p in params for p in expected_packet_param_names]), \
+        "unexpected/broken proc_human input format between simulator and inference service"
+    human = params["human"]
+
+    human.clusters.add_messages(human.messages, params["current_day"], human.rng)
+    human.messages = []
+
+    human.clusters.update_records(human.update_messages, human)
+    human.update_messages = []
+    human.clusters.purge(params["current_day"])
+
+    todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
+    is_exposed, exposure_day = human.exposure_array(todays_date)
+    is_recovered, recovery_day = human.recovered_array(todays_date)
+    candidate_encounters, exposure_encounter = frozen.helper.candidate_exposures(human, todays_date)
+    reported_symptoms = frozen.helper.symptoms_to_np(human.all_reported_symptoms, params["all_possible_symptoms"])
+    true_symptoms = frozen.helper.symptoms_to_np(human.all_symptoms, params["all_possible_symptoms"])
+    daily_output = {
+        "current_day": params["current_day"],
+        "observed": {
+            "reported_symptoms": reported_symptoms,
+            "candidate_encounters": candidate_encounters,
+            "test_results": human.get_test_result_array(todays_date),
+            "preexisting_conditions": frozen.helper.conditions_to_np(human.obs_preexisting_conditions),
+            "age": frozen.helper.encode_age(human.obs_age),
+            "sex": frozen.helper.encode_sex(human.obs_sex)
+        },
+        "unobserved": {
+            "true_symptoms": true_symptoms,
+            "is_exposed": is_exposed,
+            "exposure_day": exposure_day,
+            "is_recovered": is_recovered,
+            "recovery_day": recovery_day,
+            "infectiousness": np.array(human.infectiousnesses),
+            "true_preexisting_conditions": frozen.helper.conditions_to_np(human.preexisting_conditions),
+            "true_age": frozen.helper.encode_age(human.age),
+            "true_sex": frozen.helper.encode_sex(human.sex)
+        }
+    }
+
+    if params["save_training_data"]:
+        os.makedirs(params["log_path"], exist_ok=True)
+        with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
+            pickle.dump(daily_output, fd)
+
+    return daily_output
