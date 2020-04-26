@@ -22,7 +22,7 @@ class _ContactTracingTransformer(nn.Module):
         health_profile_embedding: nn.Module,
         time_embedding: nn.Module,
         duration_embedding: nn.Module,
-        partner_id_embedding: nn.Module,
+        partner_id_embedding: Union[nn.Module, None],
         message_embedding: nn.Module,
         self_attention_blocks: nn.ModuleList,
         self_latent_variable_pooler: Union[nn.Module, None],
@@ -110,9 +110,17 @@ class _ContactTracingTransformer(nn.Module):
             inputs["encounter_duration"], inputs["mask"]
         )
         # Embed partner-IDs
-        embedded_encounter_partner_ids = self.partner_id_embedding(
-            inputs["encounter_partner_id"], inputs["mask"]
-        )
+        if self.partner_id_embedding is not None:
+            embedded_encounter_partner_ids = self.partner_id_embedding(
+                inputs["encounter_partner_id"], inputs["mask"]
+            )
+        else:
+            embedded_encounter_partner_ids = self.partner_id_placeholder[
+                None, None
+            ].expand(batch_size, num_encounters, self.partner_id_placeholder.shape[-1])
+            embedded_encounter_partner_ids = self.entity_masker(
+                embedded_encounter_partner_ids, inputs["mask"]
+            )
         # Embed messages
         embedded_encounter_messages = self.message_embedding(
             inputs["encounter_message"], inputs["mask"]
@@ -240,6 +248,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         encounter_duration_thermo_range=(0.0, 6.0),
         encounter_duration_num_thermo_bins=32,
         num_encounter_partner_id_bits=16,
+        use_encounter_partner_id_embedding=True,
         encounter_partner_id_embedding_dim=32,
         message_dim=8,
         message_embedding_dim=128,
@@ -282,10 +291,13 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             )
         else:
             raise ValueError
-        partner_id_embedding = mods.PartnerIdEmbedding(
-            num_id_bits=num_encounter_partner_id_bits,
-            embedding_size=encounter_partner_id_embedding_dim,
-        )
+        if use_encounter_partner_id_embedding:
+            partner_id_embedding = mods.PartnerIdEmbedding(
+                num_id_bits=num_encounter_partner_id_bits,
+                embedding_size=encounter_partner_id_embedding_dim,
+            )
+        else:
+            partner_id_embedding = None
         message_embedding = mods.MessageEmbedding(
             message_dim=message_dim,
             embedding_size=message_embedding_dim,
