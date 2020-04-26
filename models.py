@@ -242,6 +242,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         health_history_embedding_dim=64,
         num_health_profile_features=14,
         health_profile_embedding_dim=32,
+        use_learned_time_embedding=False,
         time_embedding_dim=32,
         encounter_duration_embedding_dim=32,
         encounter_duration_embedding_mode="thermo",
@@ -276,7 +277,10 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             capacity=capacity,
             dropout=dropout,
         )
-        time_embedding = mods.PositionalEncoding(encoding_dim=time_embedding_dim)
+        if use_learned_time_embedding:
+            time_embedding = mods.TimeEmbedding(embedding_size=time_embedding_dim)
+        else:
+            time_embedding = mods.PositionalEncoding(encoding_dim=time_embedding_dim)
         if encounter_duration_embedding_mode == "thermo":
             duration_embedding = mods.DurationEmbedding(
                 num_thermo_bins=encounter_duration_num_thermo_bins,

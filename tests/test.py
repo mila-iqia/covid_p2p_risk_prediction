@@ -39,6 +39,13 @@ class Tests(unittest.TestCase):
         )
         test_output(ctt)
 
+        ctt = ContactTracingTransformer(
+            pool_latent_entities=False,
+            use_logit_sink=False,
+            use_learned_time_embedding=True,
+        )
+        test_output(ctt)
+
     def test_losses(self):
         from loader import ContactDataset
         from torch.utils.data import DataLoader

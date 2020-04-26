@@ -87,6 +87,23 @@ class EntityMasker(nn.Module):
         return entities * mask[:, :, None]
 
 
+class TimeEmbedding(nn.Embedding):
+    def __init__(self, embedding_size, num_timestamps=14):
+        super(TimeEmbedding, self).__init__(
+            num_embeddings=num_timestamps, embedding_dim=embedding_size
+        )
+
+    def forward(self, timestamps, mask=None):
+        timestamps = timestamps.long().abs()
+        if timestamps.dim() == 3:
+            timestamps = timestamps[..., 0]
+        assert timestamps.dim() == 2
+        output = super(TimeEmbedding, self).forward(timestamps)
+        if mask is not None:
+            output = output * mask[:, :, None]
+        return output
+
+
 class PositionalEncoding(nn.Module):
     def __init__(
         self,
