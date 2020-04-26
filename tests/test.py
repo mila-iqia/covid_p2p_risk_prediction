@@ -33,7 +33,7 @@ class Tests(unittest.TestCase):
         from loader import ContactDataset
         from torch.utils.data import DataLoader
         from models import ContactTracingTransformer
-        from losses import ContagionLoss
+        from losses import ContagionLoss, InfectiousnessLoss
         from addict import Dict
 
         batch_size = 5
@@ -52,6 +52,8 @@ class Tests(unittest.TestCase):
         loss_fn = ContagionLoss(allow_multiple_exposures=True)
         loss = loss_fn(batch, output)
         loss_fn = ContagionLoss(allow_multiple_exposures=False)
+        loss = loss_fn(batch, output)
+        loss_fn = InfectiousnessLoss()
         loss = loss_fn(batch, output)
 
     def test_loader(self):

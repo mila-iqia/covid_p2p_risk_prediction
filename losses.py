@@ -16,10 +16,27 @@ def get_class(key):
     return KEY_CLASS_MAPPING[key]
 
 
+class EntityMaskedLoss(nn.Module):
+    def __init__(self, loss_cls):
+        super(EntityMaskedLoss, self).__init__()
+        self.loss_fn = loss_cls(reduction="none")
+        assert isinstance(self.loss_fn, (nn.MSELoss, nn.BCEWithLogitsLoss))
+
+    def forward(self, input, target, mask):
+        assert input.dim() == 3
+        assert mask.dim() == 2
+        loss_elements = self.loss_fn(input, target)
+        masked_loss_elements = (
+            loss_elements[..., 0] if loss_elements.dim() == 3 else loss_elements
+        ) * (mask[..., 0] if mask.dim() == 3 else mask)
+        reduced_loss = (masked_loss_elements.sum(-1) / mask.sum(-1)).mean()
+        return reduced_loss
+
+
 class InfectiousnessLoss(nn.Module):
     def __init__(self):
         super(InfectiousnessLoss, self).__init__()
-        self.masker = EntityMasker()
+        self.masked_mse = EntityMaskedLoss(nn.MSELoss)
 
     def forward(self, model_input, model_output):
         assert model_output.latent_variable.dim() == 3, (
@@ -27,14 +44,11 @@ class InfectiousnessLoss(nn.Module):
             "set-valued latent variables."
         )
         # This will block gradients to the entities that are invalid
-        prediction = self.masker(
-            model_output.latent_variable[:, :, 0:1], model_input["valid_history_mask"]
+        return self.masked_mse(
+            model_output.latent_variable[:, :, 0:1],
+            model_input.infectiousness_history,
+            model_input["valid_history_mask"],
         )
-        with torch.no_grad():
-            target = self.masker(
-                model_input.infectiousness_history, model_input["valid_history_mask"]
-            )
-        return F.mse_loss(prediction, target)
 
 
 class ContagionLoss(nn.Module):
@@ -50,19 +64,20 @@ class ContagionLoss(nn.Module):
         """
         super(ContagionLoss, self).__init__()
         self.allow_multiple_exposures = allow_multiple_exposures
+        self.masked_bce = EntityMaskedLoss(nn.BCEWithLogitsLoss)
         self.masker = EntityMasker()
 
     def forward(self, model_input, model_output):
         contagion_logit = model_output.encounter_variables[:, :, 0:1]
-        # Mask with masker (this blocks gradients by multiplying it with 0)
-        self.masker(contagion_logit, model_input.mask)
-        B, M, C = contagion_logit.shape
         if self.allow_multiple_exposures:
             # encounter_variables.shape = BM1
-            return F.binary_cross_entropy_with_logits(
-                contagion_logit, model_input.encounter_is_contagion,
+            return self.masked_bce(
+                contagion_logit, model_input.encounter_is_contagion, model_input.mask
             )
         else:
+            # Mask with masker (this blocks gradients by multiplying it with 0)
+            self.masker(contagion_logit, model_input.mask)
+            B, M, C = contagion_logit.shape
             # Now, one of the encounters could have been the exposure event -- or not.
             # To account for this, we use a little trick and append a 0-logit to the
             # encounter variables before passing through a softmax. This 0-logit acts
