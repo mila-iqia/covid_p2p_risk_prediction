@@ -1,3 +1,28 @@
+"""
+Script to convert a saved pytorch model (found at ./models/model.pth) to
+a cdollection of TFLite models.
+
+Each TFLite model expects a fixed number of messages. To obtain the predictions
+for a new example, one should choose the TFLite model which will require the
+least amount of padding (for computational and RAM reasons).
+
+There is no direct way to convert from Pytorch to TFLite so this script
+performs the following steps :
+- Pytorch to ONNX
+- ONNX to TF Graph
+- TF Graph to TF Saved Model
+- TF Saved Model to TFLite model
+
+2020-02-27 NOTE : In the future, it may be possible to have a single TFLite
+model which supports dynamic sizes but the current stable release of
+Tensorflow (2.1) does not support this and the current release candidate (rc3)
+for Tensorflow 2.2 doesn't appear to change this.
+
+2020-02-27 WARNING : As of this writing, data format has yes to stabilize. If
+the script gives shape errors, the arguments to the dataloader may need to be
+changed to reflect what the saved pytorch model expects.
+"""
+
 import numpy
 import os
 import shutil
