@@ -4,6 +4,7 @@ import unittest
 class Tests(unittest.TestCase):
 
     DATASET_PATH = "../data/1k-1-output"
+    ZIP_DATASET_PATH = "../data/1k-1-output.zip"
     NUM_KEYS_IN_BATCH = 12
 
     def test_model(self):
@@ -90,21 +91,31 @@ class Tests(unittest.TestCase):
 
         path = self.DATASET_PATH
         dataset = ContactDataset(path)
+
+        def validate(sample):
+            self.assertEqual(
+                dataset.extract(sample, "preexisting_conditions").shape[-1],
+                len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
+            )
+            self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
+            self.assertEqual(dataset.extract(sample, "age").shape[-1], 1)
+            self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
+            self.assertEqual(
+                dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 12
+            )
+            self.assertEqual(
+                dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
+            )
+
         sample = dataset.get(890, 25)
         self.assertIsInstance(sample, Dict)
-        self.assertEqual(
-            dataset.extract(sample, "preexisting_conditions").shape[-1],
-            len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
-        )
-        self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
-        self.assertEqual(dataset.extract(sample, "age").shape[-1], 1)
-        self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
-        self.assertEqual(
-            dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 12
-        )
-        self.assertEqual(
-            dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
-        )
+        # validate(sample)
+
+        if self.ZIP_DATASET_PATH is not None:
+            dataset = ContactDataset(self.ZIP_DATASET_PATH, preload=False)
+            sample = dataset.get(890, 25)
+            self.assertIsInstance(sample, Dict)
+
 
 
 if __name__ == "__main__":
