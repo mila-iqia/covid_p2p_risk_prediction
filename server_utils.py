@@ -58,13 +58,13 @@ class InferenceServer(threading.Thread):
     def __init__(
             self,
             experiment_directory: typing.AnyStr,
-            port: int = 6688,
+            identifier: typing.Any,
             poll_delay_ms: int = 1000,
             context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
         self.experiment_directory = experiment_directory
-        self.port = port
+        self.identifier = identifier
         self.poll_delay_ms = poll_delay_ms
         self.stop_flag = threading.Event()
         self.packet_counter = AtomicCounter(init=0)
@@ -75,17 +75,21 @@ class InferenceServer(threading.Thread):
 
     def run(self):
         """Will be automatically called by the base class after construction."""
+        # import frozen modules with classes required for unpickling
+        import frozen.clusters
+        import frozen.utils
         engine = InferenceEngine(self.experiment_directory)
-        socket = self.context.socket(zmq.REP)
-        socket.identity = f"inference:{self.port}".encode("ascii")
-        socket.bind(f"tcp://*:{self.port}")
+        socket = self.context.socket(zmq.REQ)
+        socket.identity = str(self.identifier).encode("ascii")
+        socket.connect("ipc://backend.ipc")
+        socket.send(b"READY")  # tell broker we're ready
         poller = zmq.Poller()
         poller.register(socket, zmq.POLLIN)
         while not self.stop_flag.is_set():
             evts = dict(poller.poll(self.poll_delay_ms))
             if socket in evts and evts[socket] == zmq.POLLIN:
                 proc_start_time = time.time()
-                buffer = socket.recv()
+                address, empty, buffer = socket.recv_multipart()
                 hdi = pickle.loads(buffer)
                 output, human = None, None
                 try:
@@ -101,9 +105,10 @@ class InferenceServer(threading.Thread):
                 self.packet_counter.increment()
                 self.time_counter.increment(time.time() - proc_start_time)
                 if human is not None:
-                    socket.send(pickle.dumps((human['name'], human['risk'], human['clusters'])))
+                    response = pickle.dumps((human['name'], human['risk'], human['clusters']))
                 else:
-                    socket.send(pickle.dumps(None))
+                    response = pickle.dumps(None)
+                socket.send_multipart([address, b"", response])
         socket.close()
 
     def get_processed_count(self):
