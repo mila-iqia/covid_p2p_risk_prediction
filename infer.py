@@ -1,14 +1,9 @@
 import os
 from speedrun import BaseExperiment
 
-from loader import ContactPreprocessor, InvalidSetSize
+from loader import ContactPreprocessor
 from models import ContactTracingTransformer
 import torch
-
-import pickle
-import threading
-import typing
-import zmq
 
 
 class InferenceEngine(BaseExperiment):
@@ -43,65 +38,6 @@ class InferenceEngine(BaseExperiment):
             )
             infectiousness = model_output["latent_variable"].numpy()[0, :, 0]
         return dict(contagion_proba=contagion_proba, infectiousness=infectiousness)
-
-
-class InferenceServer(threading.Thread):
-
-    def __init__(
-            self,
-            experiment_directory: typing.AnyStr,
-            port: int = 6688,
-            poll_delay_ms: int = 1000,
-    ):
-        threading.Thread.__init__(self)
-        self.experiment_directory = experiment_directory
-        self.port = port
-        self.poll_delay_ms = poll_delay_ms
-        self.stop_flag = threading.Event()
-
-    def run(self):
-        engine = InferenceEngine(self.experiment_directory)
-        context = zmq.Context()
-        socket = context.socket(zmq.REP)
-        socket.identity = f"inference:{self.port}".encode("ascii")
-        socket.bind(f"tcp://*:{self.port}")
-        poller = zmq.Poller()
-        poller.register(socket, zmq.POLLIN)
-        while not self.stop_flag.is_set():
-            evts = dict(poller.poll(self.poll_delay_ms))
-            if socket in evts and evts[socket] == zmq.POLLIN:
-                hdi = pickle.loads(socket.recv())
-                output = None
-                try:
-                    output = engine.infer(hdi)
-                except InvalidSetSize:
-                    pass  # return None for invalid samples
-                socket.send(pickle.dumps(output))
-        socket.close()
-
-    def stop(self):
-        self.stop_flag.set()
-
-
-class InferenceClient:
-    def __init__(
-            self,
-            target_port: typing.Union[int, typing.List[int]],
-            target_addr: typing.AnyStr = "localhost",
-    ):
-        if isinstance(target_port, int):
-            self.target_ports = [target_port]
-        else:
-            self.target_ports = target_port
-        self.target_addr = target_addr
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
-        for port in self.target_ports:
-            self.socket.connect(f"tcp://{target_addr}:{port}")
-
-    def infer(self, sample):
-        self.socket.send(pickle.dumps(sample))
-        return pickle.loads(self.socket.recv())
 
 
 if __name__ == "__main__":
