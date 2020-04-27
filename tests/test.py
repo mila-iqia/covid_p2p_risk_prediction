@@ -5,7 +5,9 @@ class Tests(unittest.TestCase):
 
     DATASET_PATH = "../data/1k-1-output"
     EXPERIMENT_PATH = "../exp/DEBUG-0"
-    NUM_KEYS_IN_BATCH = 13
+    NUM_KEYS_IN_BATCH = 15
+
+    TEST_INFERENCE = True
 
     def test_model(self):
         from loader import ContactDataset
@@ -129,6 +131,7 @@ class Tests(unittest.TestCase):
             dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
         )
 
+    @unittest.skipIf(TEST_INFERENCE, "Data not available.")
     def test_inference(self):
         import numpy as np
         import infer

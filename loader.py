@@ -33,6 +33,8 @@ class ContactDataset(Dataset):
     ]
 
     INPUT_FIELD_TO_SLICE_MAPPING = {
+        "human_idx": ("human_idx", slice(None)),
+        "day_idx": ("day_idx", slice(None)),
         "health_history": ("health_history", slice(None)),
         "reported_symptoms": ("health_history", slice(0, 12)),
         "test_results": ("health_history", slice(12, 13)),
@@ -157,7 +159,10 @@ class ContactDataset(Dataset):
                     If not: 
                         Same as above, but `age` is now simply a float taking values in
                         Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to age 100, 
-                        whereas {-1} corresponds to the case where age is not available.  
+                        whereas {-1} corresponds to the case where age is not available.
+                -> `human_idx`: the ID of the human individual, of shape (1,). If not
+                    available, it's set to -1.
+                -> `day_idx`: the day from which the sample originates, of shape (1,).
                 -> `history_days`: time-stamps to go with the health_history,
                     of shape (14, 1).
                 -> `valid_history_mask`: 1 if the time-stamp corresponds to a valid
@@ -180,6 +185,8 @@ class ContactDataset(Dataset):
             human_day_info = self.read(human_idx, day_idx)
         else:
             day_idx = human_day_info["current_day"]
+        if human_idx is None:
+            human_idx = -1
         # -------- Encounters --------
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.
@@ -287,6 +294,8 @@ class ContactDataset(Dataset):
             encounter_day = encounter_day - day_idx
         # This should be it
         return Dict(
+            human_idx=torch.from_numpy(np.array([human_idx])),
+            day_idx=torch.from_numpy(np.array([day_idx])),
             health_history=torch.from_numpy(health_history).float(),
             health_profile=torch.from_numpy(health_profile).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
