@@ -476,7 +476,6 @@ class ContactPreprocessor(ContactDataset):
 def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
     path = dataset_kwargs.pop("path")
     if isinstance(path, str):
-        assert path.endswith(".zip")
         dataset = ContactDataset(path=path, **dataset_kwargs)
     elif isinstance(path, (list, tuple)):
         dataset = ConcatDataset(
