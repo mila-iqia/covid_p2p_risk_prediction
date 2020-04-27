@@ -22,6 +22,8 @@ expected_processed_packet_param_names = [
     "current_day", "observed", "unobserved"
 ]
 
+default_poll_delay_ms = 500
+
 
 class AtomicCounter(object):
     """Implements an atomic & thread-safe counter."""
@@ -40,32 +42,22 @@ class AtomicCounter(object):
         return self._count
 
 
-class InferenceServer(threading.Thread):
-    """Spawns a single inference server instance for a specific port.
+class InferenceWorker(threading.Thread):
+    """Spawns a single inference worker instance.
 
-    Multiple inference servers can be started simultaneously on the same
-    machine using different ports. The inference client will automatically
-    be able to pick a proper remote inference engine if it is provided all
-    the server addresses/ports simultaneously. This load balancing is
-    implemented by design in zmq.
-
-    Once created, the server instance will be able to accept connections
-    and return inference results until `server.stop()` is called. The server
-    itself runs in a separate thread that can be joined to insure proper
-    cleanup by the bootstrapping script.
+    These workers are managed by the InferenceServerManager class. They
+    communicate with the server manager using a backend connection.
     """
 
     def __init__(
             self,
             experiment_directory: typing.AnyStr,
             identifier: typing.Any,
-            poll_delay_ms: int = 1000,
             context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
         self.experiment_directory = experiment_directory
         self.identifier = identifier
-        self.poll_delay_ms = poll_delay_ms
         self.stop_flag = threading.Event()
         self.packet_counter = AtomicCounter(init=0)
         self.time_counter = AtomicCounter(init=0.)
@@ -74,7 +66,6 @@ class InferenceServer(threading.Thread):
         self.context = context
 
     def run(self):
-        """Will be automatically called by the base class after construction."""
         # import frozen modules with classes required for unpickling
         import frozen.clusters
         import frozen.utils
@@ -86,7 +77,7 @@ class InferenceServer(threading.Thread):
         poller = zmq.Poller()
         poller.register(socket, zmq.POLLIN)
         while not self.stop_flag.is_set():
-            evts = dict(poller.poll(self.poll_delay_ms))
+            evts = dict(poller.poll(default_poll_delay_ms))
             if socket in evts and evts[socket] == zmq.POLLIN:
                 proc_start_time = time.time()
                 address, empty, buffer = socket.recv_multipart()
@@ -127,14 +118,80 @@ class InferenceServer(threading.Thread):
         self.stop_flag.set()
 
 
+class InferenceServerManager(threading.Thread):
+    """Manages inference workers through a backend connection for load balancing."""
+
+    def __init__(
+            self,
+            model_exp_path: typing.AnyStr,
+            workers: int = 1,
+            port: int = 6688,
+            verbose: bool = False,
+            verbose_print_delay: float = 30.,
+            context: typing.Optional[zmq.Context] = None,
+    ):
+        threading.Thread.__init__(self)
+        if context is None:
+            context = zmq.Context()
+        self.context = context
+        self.workers = workers
+        self.port = port
+        self.model_exp_path = model_exp_path
+        self.stop_flag = threading.Event()
+        self.verbose = verbose
+        self.verbose_print_delay = verbose_print_delay
+
+    def run(self):
+        print(f"Initializing {self.workers} worker(s) from directory: {self.model_exp_path}")
+        frontend = self.context.socket(zmq.ROUTER)
+        frontend.bind(f"tcp://*:{self.port}")
+        backend = self.context.socket(zmq.ROUTER)
+        backend.bind("ipc://backend.ipc")
+        worker_map = {}
+        for worker_idx in range(self.workers):
+            worker_id = f"worker:{worker_idx}"
+            worker = InferenceWorker(self.model_exp_path, worker_id, context=self.context)
+            worker_map[worker_id] = worker
+            worker.start()
+        available_worker_ids = []
+        worker_poller = zmq.Poller()
+        worker_poller.register(backend, zmq.POLLIN)
+        worker_poller.register(frontend, zmq.POLLIN)
+        last_update_timestamp = time.time()
+        while not self.stop_flag.is_set():
+            evts = dict(worker_poller.poll(default_poll_delay_ms))
+            if backend in evts and evts[backend] == zmq.POLLIN:
+                request = backend.recv_multipart()
+                worker_id, empty, client = request[:3]
+                available_worker_ids.append(worker_id)
+                if client != b"READY" and len(request) > 3:
+                    empty, reply = request[3:]
+                    frontend.send_multipart([client, b"", reply])
+            if available_worker_ids and frontend in evts and evts[frontend] == zmq.POLLIN:
+                client, empty, request = frontend.recv_multipart()
+                worker_id = available_worker_ids.pop(0)
+                backend.send_multipart([worker_id, b"", client, b"", request])
+            if self.verbose and time.time() - last_update_timestamp > self.verbose_print_delay:
+                print(f" {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} stats:")
+                for worker_id, worker in worker_map.items():
+                    packets = worker.get_processed_count()
+                    delay = worker.get_averge_processing_delay()
+                    print(f"  {worker_id}:  packets={packets}  avg_delay={delay:.6f}sec")
+                last_update_timestamp = time.time()
+        for w in worker_map.values():
+            w.stop()
+            w.join()
+
+    def stop(self):
+        """Stops the infinite data reception loop, allowing a clean shutdown."""
+        self.stop_flag.set()
+
+
 class InferenceClient:
     """Creates a client through which data samples can be sent for inference.
 
     This object will automatically be able to pick a proper remote inference
-    engine if it is provided all the started server addresses/ports. This load
-    balancing is implemented by design in zmq.
-
-    This object should be fairly lightweight and low-cost, so creating/deleting
+    engine. This object should be fairly lightweight and low-cost, so creating
     it once per day, per human *should* not create a significant overhead.
     """
     def __init__(
