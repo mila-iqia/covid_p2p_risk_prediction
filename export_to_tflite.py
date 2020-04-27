@@ -93,7 +93,8 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
 
     # Load dataset (used for sanity checking the converted models)
     path = "./data/1k-1-output/"
-    dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0, path=path)
+    dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0, path=path,
+                                bit_encoded_age=False)
     batch = next(iter(dataloader))
 
     # Get a padded batch to use for the conversion to TF and TFLite
