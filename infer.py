@@ -22,11 +22,11 @@ class InferenceEngine(BaseExperiment):
         self.load()
 
     def load(self):
-        # path = os.path.join(self.checkpoint_directory, "best.ckpt")
-        # assert os.path.exists(path)
-        # state = torch.load(path)
-        # self.model.load_state_dict(state["model"])
-        # self.model.eval()
+        path = os.path.join(self.checkpoint_directory, "best.ckpt")
+        assert os.path.exists(path)
+        state = torch.load(path)
+        self.model.load_state_dict(state["model"])
+        self.model.eval()
         return self
 
     def infer(self, human_day_info):
