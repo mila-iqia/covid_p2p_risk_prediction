@@ -45,17 +45,9 @@ losses:
     contagion: 1.
 
 optim:
+  name: "Adam"
   kwargs:
     lr: 0.0001
-
-scheduler:
-  use: false
-  kwargs:
-    eta_min: 0.00001
-  warmup: false
-  warmup_kwargs:
-    multiplier: 1
-    total_epoch: 4
 
 training:
   num_epochs: 20
