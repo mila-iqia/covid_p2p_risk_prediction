@@ -10,10 +10,11 @@ import zmq
 
 from infer import InferenceEngine
 from loader import InvalidSetSize
+from risk_models import RiskModelTristan
 
 expected_raw_packet_param_names = [
     "start", "current_day", "all_possible_symptoms", "human",
-    "save_training_data", "log_path"
+    "COLLECT_LOGS", "log_path", "risk_model"
 ]
 
 expected_processed_packet_param_names = [
@@ -63,12 +64,16 @@ class InferenceServer(threading.Thread):
                 hdi = pickle.loads(socket.recv())
                 output = None
                 try:
-                    if len(hdi) != len(expected_processed_packet_param_names):
-                        hdi = proc_human(hdi)
-                    output = engine.infer(hdi)
+                    if len(hdi) != len(expected_processed_packet_param_names) and hdi['risk_model'] == "naive":
+                        output, human = proc_human(hdi)
+                    elif hdi['risk_model'] == "transformer":
+                        output, human = proc_human(hdi)
+                        output = engine.infer(hdi)
+                    else:
+                        raise NotImplementedError
                 except InvalidSetSize:
                     pass  # return None for invalid samples
-                socket.send(pickle.dumps(output))
+                socket.send(pickle.dumps((human['name'], human['risk'], human['clusters'])))
         socket.close()
 
     def stop(self):
@@ -114,12 +119,22 @@ def proc_human(params):
     assert isinstance(params, dict) and \
         all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
+
     human = params["human"]
     human["clusters"].add_messages(human["messages"], params["current_day"], human["rng"])
     human["messages"] = []
     human["clusters"].update_records(human["update_messages"], human)
     human["update_messages"] = []
     human["clusters"].purge(params["current_day"])
+
+    todays_date = params['start'] + datetime.timedelta(params['current_day'])
+
+    human['risk'] = RiskModelTristan.update_risk_daily(human, todays_date)
+
+    # update risk based on that day's messages
+    if human['messages']:
+        human['risk'] = RiskModelTristan.update_risk_encounters(human)
+
     todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
     is_exposed, exposure_day = frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
     is_recovered, recovery_day = frozen.helper.recovered_array(human["recovered_timestamp"], todays_date)
@@ -149,9 +164,9 @@ def proc_human(params):
         }
     }
 
-    if params["save_training_data"]:
+    if params["COLLECT_LOGS"]:
         os.makedirs(params["log_path"], exist_ok=True)
         with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
             pickle.dump(daily_output, fd)
 
-    return daily_output
+    return daily_output, human
