@@ -84,13 +84,11 @@ class InferenceWorker(threading.Thread):
                 hdi = pickle.loads(buffer)
                 output, human = None, None
                 try:
-                    if len(hdi) != len(expected_processed_packet_param_names) and hdi['risk_model'] == "naive":
+                    if 'risk_model' not in hdi or hdi['risk_model'] == "naive":
                         output, human = proc_human(hdi)
                     elif hdi['risk_model'] == "transformer":
                         output, human = proc_human(hdi)
-                        output = engine.infer(hdi)
-                    else:
-                        raise NotImplementedError
+                        output = engine.infer(output)  # TODO: figure out what to return from output @@@
                 except InvalidSetSize:
                     pass  # return None for invalid samples
                 self.packet_counter.increment()
@@ -221,6 +219,10 @@ class InferenceClient:
 
 def proc_human(params):
     """(Pre-)Processes the received simulator data for a single human."""
+
+    if all([p in params for p in expected_processed_packet_param_names]):
+        return params, None  # probably fetching data from data loader; skip stuff below
+
     import frozen.helper
     assert isinstance(params, dict) and \
         all([p in params for p in expected_raw_packet_param_names]), \
