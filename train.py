@@ -13,9 +13,8 @@ from models import ContactTracingTransformer
 from loader import get_dataloader
 from losses import WeightedSum
 from utils import to_device, momentum_accumulator
-from scheduler import GradualWarmupScheduler
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from metrics import Metrics
+import opts
 
 
 class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
@@ -50,31 +49,15 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
     def _build_criteria_and_optim(self):
         # noinspection PyArgumentList
         self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
-        self.optim = torch.optim.Adam(
+        optim_cls = getattr(opts, self.get("optim/name", "Adam"))
+        self.optim = optim_cls(
             self.model.parameters(), **self.get("optim/kwargs")
         )
         self.metrics = Metrics()
 
     def _build_scheduler(self):
-        if self.get("scheduler/use", False):
-            self._base_scheduler = CosineAnnealingLR(
-                self.optim,
-                T_max=self.get("training/num_epochs"),
-                **self.get("scheduler/kwargs", {}),
-            )
-        else:
-            self._base_scheduler = None
-        # Support for LR warmup
-        if self.get("scheduler/warmup", False):
-            assert self._base_scheduler is not None
-            self.scheduler = GradualWarmupScheduler(
-                self.optim,
-                multiplier=1,
-                total_epoch=5,
-                after_scheduler=self._base_scheduler,
-            )
-        else:
-            self.scheduler = self._base_scheduler
+        # Use one of the specialized step-wise schedulers in the opts module.
+        self.scheduler = None
 
     @property
     def device(self):
@@ -87,7 +70,6 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         for epoch in self.progress(
             range(self.get("training/num_epochs", ensure_exists=True)), tag="epochs"
         ):
-            self.log_learning_rates()
             self.train_epoch()
             validation_stats = self.validate_epoch()
             self.checkpoint()
@@ -110,6 +92,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.optim.step()
             # Log to wandb (if required)
             self.log_training_losses(losses)
+            self.log_learning_rates()
             # Log to pbar
             self.accumulate_in_cache(
                 "moving_loss", loss.item(), momentum_accumulator(0.9)
