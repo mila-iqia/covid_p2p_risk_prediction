@@ -111,32 +111,30 @@ class InferenceClient:
 def proc_human(params):
     """(Pre-)Processes the received simulator data for a single human."""
     import frozen.helper
-    assert isinstance(params, dict) and all([p in params for p in expected_packet_param_names]), \
+    assert isinstance(params, dict) and \
+        all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
     human = params["human"]
-
-    human.clusters.add_messages(human.messages, params["current_day"], human.rng)
-    human.messages = []
-
-    human.clusters.update_records(human.update_messages, human)
-    human.update_messages = []
-    human.clusters.purge(params["current_day"])
-
+    human["clusters"].add_messages(human["messages"], params["current_day"], human["rng"])
+    human["messages"] = []
+    human["clusters"].update_records(human["update_messages"], human)
+    human["update_messages"] = []
+    human["clusters"].purge(params["current_day"])
     todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
-    is_exposed, exposure_day = human.exposure_array(todays_date)
-    is_recovered, recovery_day = human.recovered_array(todays_date)
+    is_exposed, exposure_day = frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
+    is_recovered, recovery_day = frozen.helper.recovered_array(human["recovered_timestamp"], todays_date)
     candidate_encounters, exposure_encounter = frozen.helper.candidate_exposures(human, todays_date)
-    reported_symptoms = frozen.helper.symptoms_to_np(human.all_reported_symptoms, params["all_possible_symptoms"])
-    true_symptoms = frozen.helper.symptoms_to_np(human.all_symptoms, params["all_possible_symptoms"])
+    reported_symptoms = frozen.helper.symptoms_to_np(human["all_reported_symptoms"], params["all_possible_symptoms"])
+    true_symptoms = frozen.helper.symptoms_to_np(human["all_symptoms"], params["all_possible_symptoms"])
     daily_output = {
         "current_day": params["current_day"],
         "observed": {
             "reported_symptoms": reported_symptoms,
             "candidate_encounters": candidate_encounters,
-            "test_results": human.get_test_result_array(todays_date),
-            "preexisting_conditions": frozen.helper.conditions_to_np(human.obs_preexisting_conditions),
-            "age": frozen.helper.encode_age(human.obs_age),
-            "sex": frozen.helper.encode_sex(human.obs_sex)
+            "test_results": frozen.helper.get_test_result_array(human["test_time"], todays_date),
+            "preexisting_conditions": frozen.helper.conditions_to_np(human["obs_preexisting_conditions"]),
+            "age": frozen.helper.encode_age(human["obs_age"]),
+            "sex": frozen.helper.encode_sex(human["obs_sex"])
         },
         "unobserved": {
             "true_symptoms": true_symptoms,
@@ -144,10 +142,10 @@ def proc_human(params):
             "exposure_day": exposure_day,
             "is_recovered": is_recovered,
             "recovery_day": recovery_day,
-            "infectiousness": np.array(human.infectiousnesses),
-            "true_preexisting_conditions": frozen.helper.conditions_to_np(human.preexisting_conditions),
-            "true_age": frozen.helper.encode_age(human.age),
-            "true_sex": frozen.helper.encode_sex(human.sex)
+            "infectiousness": np.array(human["infectiousnesses"]),
+            "true_preexisting_conditions": frozen.helper.conditions_to_np(human["preexisting_conditions"]),
+            "true_age": frozen.helper.encode_age(human["age"]),
+            "true_sex": frozen.helper.encode_sex(human["sex"])
         }
     }
 

@@ -16,9 +16,42 @@ PREEXISTING_CONDITIONS_META = {
 }
 
 
+def exposure_array(human_infection_timestamp, date):
+    # identical to human.exposure_array
+    exposed = False
+    exposure_day = None
+    if human_infection_timestamp:
+        exposure_day = (date - human_infection_timestamp).days
+        if exposure_day >= 0 and exposure_day < 14:
+            exposed = True
+        else:
+            exposure_day = None
+    return exposed, exposure_day
+
+
+def recovered_array(human_recovered_timestamp, date):
+    # identical to human.recovered_array
+    is_recovered = False
+    recovery_day = (date - human_recovered_timestamp).days
+    if recovery_day >= 0 and recovery_day < 14:
+        is_recovered = True
+    else:
+        recovery_day = None
+    return is_recovered, recovery_day
+
+
+def get_test_result_array(human_test_time, date):
+    # identical to human.get_test_result_array
+    results = np.zeros(14)
+    result_day = (date - human_test_time).days
+    if result_day >= 0 and result_day < 14:
+        results[result_day] = 1
+    return results
+
+
 def messages_to_np(human):
     ms_enc = []
-    for day, clusters in human.clusters.clusters_by_day.items():
+    for day, clusters in human["clusters"].clusters_by_day.items():
         for cluster_id, messages in clusters.items():
             # TODO: take an average over the risks for that day
             if not any(messages):
@@ -30,12 +63,12 @@ def messages_to_np(human):
 def candidate_exposures(human, date):
     candidate_encounters = messages_to_np(human)
     exposed_encounters = np.zeros(len(candidate_encounters))
-    if human.exposure_message and human.exposure_message in human.clusters.all_messages:
+    if human["exposure_message"] and human["exposure_message"] in human["clusters"].all_messages:
         idx = 0
-        for day, clusters in human.clusters.clusters_by_day.items():
+        for day, clusters in human["clusters"].clusters_by_day.items():
             for cluster_id, messages in clusters.items():
                 for message in messages:
-                    if message == human.exposure_message:
+                    if message == human["exposure_message"]:
                         exposed_encounters[idx] = 1.
                         break
                 if any(messages):
