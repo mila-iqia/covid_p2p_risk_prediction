@@ -40,7 +40,7 @@ class MAB(nn.Module):
             # Simple codepath for unweighted attention
             A = torch.softmax(Q_.bmm(K_.transpose(1, 2)) / math.sqrt(self.dim_V), 2)
         else:
-            assert isinstance(weights, list) and len(weights) == 4
+            assert isinstance(weights, list) and len(weights) == self.num_heads
             weights = torch.cat(weights, dim=0)
             assert weights.shape[0] == Q_.shape[0]
             # Log and clamp weights
