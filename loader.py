@@ -3,6 +3,8 @@ from addict import Dict
 import os
 import glob
 from typing import Union
+import zipfile
+import io
 
 import numpy as np
 import torch
@@ -69,6 +71,7 @@ class ContactDataset(Dataset):
         relative_days=True,
         bit_encoded_age=True,
         clip_history_days=True,
+        preload=False,
     ):
         """
         Parameters
@@ -88,6 +91,9 @@ class ContactDataset(Dataset):
             Whether `history_days` (in the output) clips to the equivalent of
             day 0 for days that predate records. E.g. in day 5, whether
             `history_days[10]` is -5 (True) or -10 (False).
+        preload : bool
+            If path points to a zipfile, load the entire file to RAM (as a
+            BytesIO object).
         """
         # Private
         self._num_id_bits = 16
@@ -96,21 +102,45 @@ class ContactDataset(Dataset):
         self.relative_days = relative_days
         self.bit_encoded_age = bit_encoded_age
         self.clip_history_days = clip_history_days
+        self.preload = preload
         # Prepwork
+        self._preloaded = None
         self._read_data()
 
     def _read_data(self):
-        assert os.path.isdir(self.path)
-        files = glob.glob(os.path.join(self.path, "*"))
-        day_idxs, human_idxs = zip(
-            *[
-                [
-                    int(component)
-                    for component in os.path.basename(file).strip(".pkl").split("-")
+        if os.path.isdir(self.path):
+            # Case 1: Extracted files
+            files = glob.glob(os.path.join(self.path, "*"))
+            day_idxs, human_idxs = zip(
+                *[
+                    [
+                        int(component)
+                        for component in os.path.basename(file).strip(".pkl").split("-")
+                    ]
+                    for file in files
                 ]
-                for file in files
-            ]
-        )
+            )
+        elif self.path.endswith(".zip"):
+            # Case 2: Zipfiles
+            if self.preload:
+                with open(self.path, "rb") as f:
+                    buffer = io.BytesIO(f.read())
+                buffer.seek(0)
+                self._preloaded = zipfile.ZipFile(buffer)
+                files = self._preloaded.namelist()
+            else:
+                with zipfile.ZipFile(self.path) as zf:
+                    files = zipfile.ZipFile.namelist(zf)
+            # FIXME This needs more fixing
+            day_idxs, human_idxs = zip(
+                *[
+                    [int(component) for component in file[:-4].split("-")]
+                    for file in files
+                    if (file.endswith(".pkl") and not file.startswith("__MACOSX"))
+                ]
+            )
+        else:
+            raise ValueError
         self._num_days = max(day_idxs) + 1
         self._num_humans = max(human_idxs)
 
@@ -126,9 +156,25 @@ class ContactDataset(Dataset):
         return self.num_humans * self.num_days
 
     def read(self, human_idx, day_idx):
-        file_name = os.path.join(self.path, f"{day_idx}-{human_idx + 1}.pkl")
-        with open(file_name, "rb") as f:
-            return pickle.load(f)
+        file_name = f"{day_idx}-{human_idx + 1}.pkl"
+        if os.path.isdir(self.path):
+            # We're working with a dir, so we read and return
+            file_name = os.path.join(self.path, file_name)
+            with open(file_name, "rb") as f:
+                return pickle.load(f)
+        elif self.path.endswith(".zip"):
+            # We're working with a zipfile
+            # Check if we have the content preload to RAM
+            if self._preloaded is not None:
+                self._preloaded: zipfile.ZipFile
+                with self._preloaded.open(file_name, "rb") as f:
+                    return pickle.load(f)
+            else:
+                # Read zip archive from path, and then read content
+                # from archive
+                with zipfile.ZipFile(self.path) as zf:
+                    with zf.open(file_name, "r") as f:
+                        return pickle.load(f)
 
     def get(self, human_idx: int, day_idx: int, human_day_info: dict = None) -> Dict:
         """
@@ -405,6 +451,10 @@ class ContactDataset(Dataset):
         else:
             raise TypeError
         return tensor[..., slice_]
+
+    def __del__(self):
+        if self._preloaded is not None:
+            self._preloaded.close()
 
 
 class ContactPreprocessor(ContactDataset):
