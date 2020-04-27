@@ -5,6 +5,7 @@ import numpy as np
 import os
 import pickle
 import threading
+import time
 import typing
 import zmq
 
@@ -20,6 +21,23 @@ expected_raw_packet_param_names = [
 expected_processed_packet_param_names = [
     "current_day", "observed", "unobserved"
 ]
+
+
+class AtomicCounter(object):
+    """Implements an atomic & thread-safe counter."""
+
+    def __init__(self, init=0):
+        self._count = init
+        self._lock = threading.Lock()
+
+    def increment(self, delta=1):
+        with self._lock:
+            self._count += delta
+            return self._count
+
+    @property
+    def count(self):
+        return self._count
 
 
 class InferenceServer(threading.Thread):
@@ -42,18 +60,23 @@ class InferenceServer(threading.Thread):
             experiment_directory: typing.AnyStr,
             port: int = 6688,
             poll_delay_ms: int = 1000,
+            context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
         self.experiment_directory = experiment_directory
         self.port = port
         self.poll_delay_ms = poll_delay_ms
         self.stop_flag = threading.Event()
+        self.packet_counter = AtomicCounter(init=0)
+        self.time_counter = AtomicCounter(init=0.)
+        if context is None:
+            context = zmq.Context()
+        self.context = context
 
     def run(self):
         """Will be automatically called by the base class after construction."""
         engine = InferenceEngine(self.experiment_directory)
-        context = zmq.Context()
-        socket = context.socket(zmq.REP)
+        socket = self.context.socket(zmq.REP)
         socket.identity = f"inference:{self.port}".encode("ascii")
         socket.bind(f"tcp://*:{self.port}")
         poller = zmq.Poller()
@@ -61,8 +84,10 @@ class InferenceServer(threading.Thread):
         while not self.stop_flag.is_set():
             evts = dict(poller.poll(self.poll_delay_ms))
             if socket in evts and evts[socket] == zmq.POLLIN:
-                hdi = pickle.loads(socket.recv())
-                output = None
+                proc_start_time = time.time()
+                buffer = socket.recv()
+                hdi = pickle.loads(buffer)
+                output, human = None, None
                 try:
                     if len(hdi) != len(expected_processed_packet_param_names) and hdi['risk_model'] == "naive":
                         output, human = proc_human(hdi)
@@ -73,8 +98,24 @@ class InferenceServer(threading.Thread):
                         raise NotImplementedError
                 except InvalidSetSize:
                     pass  # return None for invalid samples
-                socket.send(pickle.dumps((human['name'], human['risk'], human['clusters'])))
+                self.packet_counter.increment()
+                self.time_counter.increment(time.time() - proc_start_time)
+                if human is not None:
+                    socket.send(pickle.dumps((human['name'], human['risk'], human['clusters'])))
+                else:
+                    socket.send(pickle.dumps(None))
         socket.close()
+
+    def get_processed_count(self):
+        """Returns the total number of processed requests by this inference server."""
+        return self.packet_counter.count
+
+    def get_averge_processing_delay(self):
+        """Returns the average sample processing time between reception & response (in seconds)."""
+        tot_delay, tot_packet_count = self.time_counter.count, self.packet_counter.count
+        if not tot_packet_count:
+            return float("nan")
+        return tot_delay / self.packet_counter.count
 
     def stop(self):
         """Stops the infinite data reception loop, allowing a clean shutdown."""
@@ -95,6 +136,7 @@ class InferenceClient:
             self,
             target_port: typing.Union[int, typing.List[int]],
             target_addr: typing.Union[str, typing.List[str]] = "localhost",
+            context: typing.Optional[zmq.Context] = None,
     ):
         self.target_ports = [target_port] if isinstance(target_port, int) else target_port
         self.target_addrs = [target_addr] if isinstance(target_addr, str) else target_addr
@@ -102,7 +144,9 @@ class InferenceClient:
             assert len(self.target_addrs) == 1 and len(self.target_ports) > 1, \
                 "must either match all ports to one address or provide full port/addr combos"
             self.target_addrs = self.target_addrs * len(self.target_ports)
-        self.context = zmq.Context()
+        if context is None:
+            context = zmq.Context()
+        self.context = context
         self.socket = self.context.socket(zmq.REQ)
         for addr, port in zip(self.target_addrs, self.target_ports):
             self.socket.connect(f"tcp://{addr}:{port}")

@@ -1,11 +1,13 @@
 """Entrypoint that can be used to start many inference servers on a single node."""
 
 import argparse
+import datetime
 import functools
 import os
 import signal
 import sys
 import time
+import zmq
 
 import server_utils
 
@@ -24,24 +26,27 @@ def parse_args(args=None):
                    f"inference engine(s). Will use '{default_model_exp_path}' if not provided. " \
                    f"See `infer.py` for more information."
     argparser.add_argument("-e", "--exp-path", default=None, type=str, help=exp_path_doc)
+    verbosity_doc = "Toggles program verbosity on/off. Default is OFF (0). Variable expects 0 or 1."
+    argparser.add_argument("-v", "--verbose", default=0, type=int, help=verbosity_doc)
     args = argparser.parse_args(args)
-    return args.ports, args.exp_path
+    return args.ports, args.exp_path, args.verbose
 
 
-def validate_args(ports, exp_path):
+def validate_args(ports, exp_path, verbose):
     if ports is None:
         ports = [default_port]
     else:
         assert ports.count('-') <= 1, "port range should contain a single dash"
         if '-' in ports:
             ports = [int(port) for port in ports.split('-')]
+            ports = list(range(ports[0], ports[1] + 1))
         else:
             assert ports.isdigit(), f"unexpected port number format ({ports})"
             ports = [int(ports)]
     if exp_path is None:
         exp_path = default_model_exp_path
     assert os.path.isdir(exp_path), f"invalid experiment directory path: {exp_path}"
-    return ports, exp_path
+    return ports, exp_path, verbose
 
 
 def interrupt_handler(signal, frame, servers):
@@ -54,14 +59,21 @@ def interrupt_handler(signal, frame, servers):
 
 
 def main(args=None):
-    ports, exp_path = validate_args(*parse_args(args))
+    ports, exp_path, verbose = validate_args(*parse_args(args))
     print(f"Initializing {len(ports)} inference engine(s) from directory: {exp_path}")
-    servers = [server_utils.InferenceServer(exp_path, port) for port in ports]
+    context = zmq.Context()
+    servers = [server_utils.InferenceServer(exp_path, port, context=context) for port in ports]
     _ = [s.start() for s in servers]
     handler = functools.partial(interrupt_handler, servers=servers)
     signal.signal(signal.SIGINT, handler)
     while True:
         time.sleep(60)
+        if verbose:
+            print(f" {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} stats:")
+            for server_idx, server in enumerate(servers):
+                packets = server.get_processed_count()
+                delay = server.get_averge_processing_delay()
+                print(f"  server#{server_idx+1:03d}:  packets={packets}  avg_delay={delay}")
 
 
 if __name__ == "__main__":
