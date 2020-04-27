@@ -11,15 +11,15 @@ This repo contains pytorch dataloaders and a Transformer model; you can start fr
 
 ## Quick Start
 
-### Get the data 
+TODO
 
-## Datsets Table
+## Datasets
 
-Risk Prediction Type | Clustering Type | Simulator Version | Risk Prediction Version | Population | Duration | Seeds | Link
---- | --- | --- | --- | --- | --- | --- | ---
-Naive First-Order Contact Tracing | Heuristic | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 1,000 | 60 days | 10 | [download](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/covi-1k-04-27.zip)
-Naive First-Order Contact Tracing | Heuristic | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 50,000 | 60 days | 5 | Coming by April 28th
-Transformer | Heuristic |  N/A  | N/A | 50,000 | 60 days | 10 | Coming by April 30th
+Risk Prediction Type | Clustering Type | Simulator Version | Risk Prediction Version | Population | Duration (days) | Seeds | Link | MD5
+--- | --- | --- | --- | --- | --- | --- | --- | ---
+Naive First-Order Contact Tracing | Heuristic | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 1,000 | 60 | 10 | [download](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/covi-1k-04-27.zip) | 0886c2001edee33dd0f59fd58062909f
+Naive First-Order Contact Tracing | Heuristic | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 50,000 | 60 | 5 | Coming by April 28th | TBD
+Transformer | Heuristic |  N/A  | N/A | 50,000 | 60 | 10 | Coming by April 30th | TBD
 
 
 
