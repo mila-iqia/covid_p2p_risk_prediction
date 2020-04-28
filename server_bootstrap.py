@@ -11,7 +11,9 @@ import server_utils
 
 default_port = 6688
 default_workers = 1
+default_threads = 8
 default_model_exp_path = os.path.abspath("exp/DEBUG-0")
+default_mp_backend = "loky"
 
 
 def parse_args(args=None):
@@ -28,11 +30,15 @@ def parse_args(args=None):
     argparser.add_argument("-w", "--workers", default=None, type=int, help=workers_doc)
     verbosity_doc = "Toggles program verbosity on/off. Default is OFF (0). Variable expects 0 or 1."
     argparser.add_argument("-v", "--verbose", default=0, type=int, help=verbosity_doc)
+    mp_backend_doc = f"Name of the joblib backend to use. Default is {default_mp_backend}."
+    argparser.add_argument("--mp-backend", default=None, type=int, help=mp_backend_doc)
+    mp_threads_doc = f"Number of threads to spawn in each worker. Will use {default_threads} by default."
+    argparser.add_argument("--mp-threads", default=None, type=int, help=mp_threads_doc)
     args = argparser.parse_args(args)
-    return args.port, args.exp_path, args.workers, args.verbose
+    return args.port, args.exp_path, args.workers, args.verbose, args.mp_backend, args.mp_threads
 
 
-def validate_args(port, exp_path, workers, verbose):
+def validate_args(port, exp_path, workers, verbose, mp_backend, mp_threads):
     if port is None:
         port = default_port
     else:
@@ -44,7 +50,10 @@ def validate_args(port, exp_path, workers, verbose):
     if workers is None:
         workers = default_workers
     assert workers > 0, f"invalid worker count: {workers}"
-    return port, exp_path, workers, verbose
+    if mp_threads is None:
+        mp_threads = default_threads
+    assert mp_threads > 0, f"invalid thread count: {mp_threads}"
+    return port, exp_path, workers, verbose, mp_backend, mp_threads
 
 
 def interrupt_handler(signal, frame, manager):
@@ -56,10 +65,13 @@ def interrupt_handler(signal, frame, manager):
 
 
 def main(args=None):
-    port, exp_path, workers, verbose = validate_args(*parse_args(args))
+    port, exp_path, workers, verbose, mp_backend, mp_threads = \
+        validate_args(*parse_args(args))
     manager = server_utils.InferenceServerManager(
         model_exp_path=exp_path,
         workers=workers,
+        mp_backend=mp_backend,
+        mp_threads=mp_threads,
         port=port,
         verbose=verbose,
     )
