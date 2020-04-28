@@ -128,7 +128,7 @@ class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
         all_losses_and_metrics.update(Dict(self.metrics.evaluate()))
         self.log_validation_losses_and_metrics(all_losses_and_metrics)
         # Store the validation loss in cache. This will be used for checkpointing.
-        self.write_to_cache("current_validation_loss", all_losses_and_metrics.loss)
+        self.write_to_cache("current_validation_metrics", all_losses_and_metrics)
         return all_losses_and_metrics
 
     def log_training_losses(self, losses):
@@ -144,6 +144,19 @@ class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
         return self
 
     def checkpoint(self, force=False):
+        # Checkpoint as required
+        if force or self.epoch % self.get("training/checkpoint/every", 1) == 0:
+            info_dict = {
+                "model": self.model.state_dict(),
+                "optim": self.optim.state_dict(),
+            }
+            torch.save(info_dict, self.checkpoint_path)
+        if self.get("training/checkpoint/if_best", True):
+            # Save a checkpoint if the validation loss is better than best
+            self.checkpoint_if_best_validation_loss()
+        return self
+
+    def checkpoint_if_best_validation_loss(self):
         current_validation_loss = self.read_from_cache(
             "current_validation_loss", float("inf")
         )
@@ -152,8 +165,6 @@ class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
         )
         if current_validation_loss < best_validation_loss:
             self.write_to_cache("best_validation_loss", current_validation_loss)
-            ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
-        elif self.get_arg("force_checkpoint", force):
             ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
         else:
             ckpt_path = None

@@ -52,6 +52,9 @@ optim:
 
 training:
   num_epochs: 40
+  checkpoint:
+    every: 5
+    if_best: true
 
 wandb:
   use: true
