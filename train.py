@@ -56,7 +56,8 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         self.metrics = Metrics()
 
     def _build_scheduler(self):
-        # Use one of the specialized step-wise schedulers in the opts module.
+        # Set up an epoch-wise scheduler here if you want to, but the
+        # recommendation is to use the one defined in opts.
         self.scheduler = None
 
     @property
