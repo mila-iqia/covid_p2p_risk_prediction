@@ -69,8 +69,8 @@ class ContactDataset(Dataset):
         self,
         path: str,
         relative_days=True,
-        bit_encoded_age=True,
-        clip_history_days=True,
+        bit_encoded_age=False,
+        clip_history_days=False,
         preload=False,
     ):
         """
