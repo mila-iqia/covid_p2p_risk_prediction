@@ -1,5 +1,5 @@
 from typing import Union
-from addict import Dict
+from contextlib import contextmanager
 
 import torch
 import torch.nn as nn
@@ -33,6 +33,9 @@ class _ContactTracingTransformer(nn.Module):
         duration_placeholder: nn.Parameter,
     ):
         super(_ContactTracingTransformer, self).__init__()
+        # Private
+        self._diagnose = False
+        # Public
         self.health_history_embedding = health_history_embedding
         self.health_profile_embedding = health_profile_embedding
         self.time_embedding = time_embedding
@@ -46,6 +49,13 @@ class _ContactTracingTransformer(nn.Module):
         self.message_placeholder = message_placeholder
         self.partner_id_placeholder = partner_id_placeholder
         self.duration_placeholder = duration_placeholder
+
+    @contextmanager
+    def diagnose(self):
+        old_diagnose = self._diagnose
+        self._diagnose = True
+        yield
+        self._diagnose = old_diagnose
 
     def forward(self, inputs):
         """
@@ -210,6 +220,13 @@ class _ContactTracingTransformer(nn.Module):
         results = dict()
         results["encounter_variables"] = encounter_variables
         results["latent_variable"] = latent_variable
+        if self._diagnose:
+            _locals = dict(locals())
+            _locals.pop("results")
+            _locals.pop("self")
+            _locals.pop("encounter_variables")
+            _locals.pop("latent_variable")
+            results.update(_locals)
         return results
 
 

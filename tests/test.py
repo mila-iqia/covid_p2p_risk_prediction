@@ -72,8 +72,8 @@ class Tests(unittest.TestCase):
 
         # Make the model and set it to eval
         # noinspection PyUnresolvedReferences
-        ctt = ContactTracingTransformer().eval()
-        with torch.no_grad():
+        ctt = ContactTracingTransformer(num_sabs=1).eval()
+        with torch.no_grad(), ctt.diagnose():
             output = ctt(batch)
             padded_output = ctt(padded_batch)
 
