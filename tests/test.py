@@ -29,23 +29,13 @@ class Tests(unittest.TestCase):
             self.assertEqual(output.latent_variable.shape[0], batch_size)
             self.assertEqual(output.encounter_variables.shape[0], batch_size)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False, use_logit_sink=False
-        )
+        ctt = ContactTracingTransformer()
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False,
-            use_logit_sink=False,
-            use_encounter_partner_id_embedding=False,
-        )
+        ctt = ContactTracingTransformer(use_encounter_partner_id_embedding=False,)
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False,
-            use_logit_sink=False,
-            use_learned_time_embedding=True,
-        )
+        ctt = ContactTracingTransformer(use_learned_time_embedding=True,)
         test_output(ctt)
 
     def test_losses(self):
@@ -63,9 +53,7 @@ class Tests(unittest.TestCase):
         )
         batch = next(iter(dataloader))
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False, use_logit_sink=False
-        )
+        ctt = ContactTracingTransformer()
         output = Dict(ctt(batch))
 
         loss_fn = ContagionLoss(allow_multiple_exposures=True)
@@ -139,9 +127,7 @@ class Tests(unittest.TestCase):
         import server_utils
 
         manager = server_utils.InferenceServerManager(
-            model_exp_path=self.EXPERIMENT_PATH,
-            workers=2,
-            port=6688,
+            model_exp_path=self.EXPERIMENT_PATH, workers=2, port=6688,
         )
         manager.start()
         local_engine = infer.InferenceEngine(self.EXPERIMENT_PATH)
@@ -162,7 +148,7 @@ class Tests(unittest.TestCase):
             if local_output is None:
                 self.assertTrue(remote_output is None)
             # TODO: test below is pretty useless until we figure out the output
-            #if local_output is not None:
+            # if local_output is not None:
             if local_output is not None and remote_output is not None:
                 for output in [local_output, remote_output]:
                     self.assertIsInstance(output, dict)
