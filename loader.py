@@ -167,7 +167,7 @@ class ContactDataset(Dataset):
             # Check if we have the content preload to RAM
             if self._preloaded is not None:
                 self._preloaded: zipfile.ZipFile
-                with self._preloaded.open(file_name, "rb") as f:
+                with self._preloaded.open(file_name, "r") as f:
                     return pickle.load(f)
             else:
                 # Read zip archive from path, and then read content
