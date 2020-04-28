@@ -7,6 +7,8 @@ import math
 
 
 class MAB(nn.Module):
+    EPS = 1e-7
+
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
         super(MAB, self).__init__()
         self.dim_V = dim_V
@@ -40,11 +42,14 @@ class MAB(nn.Module):
             # Simple codepath for unweighted attention
             A = torch.softmax(Q_.bmm(K_.transpose(1, 2)) / math.sqrt(self.dim_V), 2)
         else:
+            # If weights is a tensor, broadcast along all heads
+            if torch.is_tensor(weights):
+                weights = [weights] * self.num_heads
             assert isinstance(weights, list) and len(weights) == self.num_heads
             weights = torch.cat(weights, dim=0)
             assert weights.shape[0] == Q_.shape[0]
             # Log and clamp weights
-            log_weights = torch.log(weights.clamp_min(0.0))
+            log_weights = torch.log(weights.clamp_min(0.) + self.EPS)
             attention_scores = Q_.bmm(K_.transpose(1, 2)) / math.sqrt(self.dim_V)
             A = torch.softmax(attention_scores + log_weights, 2)
         return A

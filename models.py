@@ -200,10 +200,13 @@ class _ContactTracingTransformer(nn.Module):
             + embedded_encounter_duration.shape[2]
         )
         meta_data = entities[:, :, :meta_data_dim]
+        # Make a mask for the attention mech. This mask prevents attention between
+        # two entities if either one of them is a padding entity.
+        attention_mask = expanded_mask[:, :, None] * expanded_mask[:, None, :]
         # Let'er rip!
         # noinspection PyTypeChecker
         for sab in self.self_attention_blocks:
-            entities = sab(entities)
+            entities = sab(entities, weights=attention_mask)
             entities = self.entity_masker(entities, expanded_mask)
             # Append meta-data for the next round of message passing
             entities = torch.cat([meta_data, entities], dim=2)
