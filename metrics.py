@@ -29,6 +29,7 @@ import torch.nn.functional as F
 # no test results (precision in untested users), and precision within people who have no
 # test results and no symptoms (precision in untested and asymptomatic users).
 
+
 class Metrics(nn.Module):
     def __init__(self):
         super(Metrics, self).__init__()
@@ -57,9 +58,7 @@ class Metrics(nn.Module):
             model_input.infectiousness_history
             * model_input["valid_history_mask"][..., None]
         )
-        diff = prediction.view(
-            -1
-        ) - target.view(-1)
+        diff = prediction.view(-1) - target.view(-1)
         self.total_infectiousness_loss += torch.sum(diff * diff).item()
         self.total_infectiousness_count += diff.size(0)
 
@@ -87,7 +86,10 @@ class Metrics(nn.Module):
             human_idx = model_input.human_idx[k].item()
             day_idx = model_input.day_idx[k].item()
             prediction = model_output.latent_variable[k, 0, 0].item()
-            if model_input.current_compartment[k][1] == 1 or model_input.current_compartment[k][2] == 1:
+            if (
+                model_input.current_compartment[k][1] == 1
+                or model_input.current_compartment[k][2] == 1
+            ):
                 target = 1
             else:
                 target = 0
@@ -101,13 +103,15 @@ class Metrics(nn.Module):
                 tested = 0
             if day_idx not in self.status_prediction:
                 self.status_prediction[day_idx] = list()
-            self.status_prediction[day_idx].append((human_idx, prediction, target, symptom, tested))
+            self.status_prediction[day_idx].append(
+                (human_idx, prediction, target, symptom, tested)
+            )
 
     def evaluate(self, threshold=0.1):
         precision, recall, f1 = 0.0, 0.0, 0.0
         precision_untested = 0.0
         precision_untested_asymptomatic = 0.0
-        
+
         for day_idx, status in self.status_prediction.items():
             # update precision
             a, b, current_precision = 0.0, 0.0, 0.0
@@ -154,7 +158,12 @@ class Metrics(nn.Module):
             precision_untested += current_precision_untested
             precision_untested_asymptomatic += current_precision_untested_asymptomatic
             recall += current_recall
-            f1 += 2 * current_precision * current_recall / (current_precision + current_recall + 1e-10) 
+            f1 += (
+                2
+                * current_precision
+                * current_recall
+                / (current_precision + current_recall + 1e-10)
+            )
 
         precision /= len(self.status_prediction)
         precision_untested /= len(self.status_prediction)
@@ -175,8 +184,11 @@ class Metrics(nn.Module):
                 ("hit@1", self.total_encounter_hit1 / self.total_encounter_count),
                 ("precision", precision),
                 ("precision in untested users", precision_untested),
-                ("precision in untested and asymptomatic users", precision_untested_asymptomatic),
+                (
+                    "precision in untested and asymptomatic users",
+                    precision_untested_asymptomatic,
+                ),
                 ("recall", recall),
-                ("f1", f1)
+                ("f1", f1),
             ]
         )
