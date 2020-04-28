@@ -21,9 +21,17 @@ class Metrics(nn.Module):
 
     def update(self, model_input, model_output):
         # Task 1: Infectiousness Prediction
-        diff = model_output.latent_variable[:, :, 0:1].view(
+        prediction = (
+            model_output.latent_variable[:, :, 0:1]
+            * model_input["valid_history_mask"][..., None]
+        )
+        target = (
+            model_input.infectiousness_history
+            * model_input["valid_history_mask"][..., None]
+        )
+        diff = prediction.view(
             -1
-        ) - model_input.infectiousness_history.view(-1)
+        ) - target.view(-1)
         self.total_infectiousness_loss += torch.sum(diff * diff).item()
         self.total_infectiousness_count += diff.size(0)
 

@@ -13,9 +13,8 @@ from models import ContactTracingTransformer
 from loader import get_dataloader
 from losses import WeightedSum
 from utils import to_device, momentum_accumulator
-from scheduler import GradualWarmupScheduler
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from metrics import Metrics
+import opts
 
 
 class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
@@ -50,31 +49,15 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
     def _build_criteria_and_optim(self):
         # noinspection PyArgumentList
         self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
-        self.optim = torch.optim.Adam(
+        optim_cls = getattr(opts, self.get("optim/name", "Adam"))
+        self.optim = optim_cls(
             self.model.parameters(), **self.get("optim/kwargs")
         )
         self.metrics = Metrics()
 
     def _build_scheduler(self):
-        if self.get("scheduler/use", False):
-            self._base_scheduler = CosineAnnealingLR(
-                self.optim,
-                T_max=self.get("training/num_epochs"),
-                **self.get("scheduler/kwargs", {}),
-            )
-        else:
-            self._base_scheduler = None
-        # Support for LR warmup
-        if self.get("scheduler/warmup", False):
-            assert self._base_scheduler is not None
-            self.scheduler = GradualWarmupScheduler(
-                self.optim,
-                multiplier=1,
-                total_epoch=5,
-                after_scheduler=self._base_scheduler,
-            )
-        else:
-            self.scheduler = self._base_scheduler
+        # Use one of the specialized step-wise schedulers in the opts module.
+        self.scheduler = None
 
     @property
     def device(self):
@@ -87,9 +70,9 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         for epoch in self.progress(
             range(self.get("training/num_epochs", ensure_exists=True)), tag="epochs"
         ):
-            self.log_learning_rates()
             self.train_epoch()
             validation_stats = self.validate_epoch()
+            self.checkpoint()
             self.log_progress("epochs", **validation_stats)
             self.step_scheduler(epoch)
             self.next_epoch()
@@ -109,6 +92,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.optim.step()
             # Log to wandb (if required)
             self.log_training_losses(losses)
+            self.log_learning_rates()
             # Log to pbar
             self.accumulate_in_cache(
                 "moving_loss", loss.item(), momentum_accumulator(0.9)
@@ -154,7 +138,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
             self.wandb_log(**metrics)
         return self
 
-    def checkpoint(self, force=True):
+    def checkpoint(self, force=False):
         current_validation_loss = self.read_from_cache(
             "current_validation_loss", float("inf")
         )
@@ -164,6 +148,8 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         if current_validation_loss < best_validation_loss:
             self.write_to_cache("best_validation_loss", current_validation_loss)
             ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
+        elif self.get_arg("force_checkpoint", force):
+            ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
         else:
             ckpt_path = None
         if ckpt_path is not None:
@@ -172,6 +158,18 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
                 "optim": self.optim.state_dict(),
             }
             torch.save(info_dict, ckpt_path)
+        return self
+
+    def load(self, device=None):
+        ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError
+        info_dict = torch.load(
+            ckpt_path,
+            map_location=torch.device((self.device if device is None else device)),
+        )
+        self.model.load_state_dict(info_dict["model"])
+        self.optim.load_state_dict(info_dict["optim"])
         return self
 
     def log_validation_losses_and_metrics(self, losses):

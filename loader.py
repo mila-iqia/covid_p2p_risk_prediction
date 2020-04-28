@@ -35,6 +35,8 @@ class ContactDataset(Dataset):
     ]
 
     INPUT_FIELD_TO_SLICE_MAPPING = {
+        "human_idx": ("human_idx", slice(None)),
+        "day_idx": ("day_idx", slice(None)),
         "health_history": ("health_history", slice(None)),
         "reported_symptoms": ("health_history", slice(0, 12)),
         "test_results": ("health_history", slice(12, 13)),
@@ -69,7 +71,7 @@ class ContactDataset(Dataset):
         relative_days=True,
         bit_encoded_age=True,
         clip_history_days=True,
-        preload=False,
+        preload=False
     ):
         """
         Parameters
@@ -101,6 +103,7 @@ class ContactDataset(Dataset):
         self.bit_encoded_age = bit_encoded_age
         self.clip_history_days = clip_history_days
         self.preload = preload
+
         # Prepwork
         self._preloaded = None
         self._read_data()
@@ -138,6 +141,8 @@ class ContactDataset(Dataset):
                 ]
             )
         else:
+            print("----")
+            print(self.path)
             raise ValueError
         self._num_days = max(day_idxs) + 1
         self._num_humans = max(human_idxs)
@@ -203,7 +208,11 @@ class ContactDataset(Dataset):
                     If not: 
                         Same as above, but `age` is now simply a float taking values in
                         Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to age 100, 
-                        whereas {-1} corresponds to the case where age is not available.  
+                        whereas {-1} corresponds to the case where age is not available.
+                -> `human_idx`: the ID of the human individual, of shape (1,). If not
+                    available, it's set to -1.
+                -> `day_idx`: the day from which the sample originates, of shape (1,).
+
                 -> `history_days`: time-stamps to go with the health_history,
                     of shape (14, 1).
                 -> `valid_history_mask`: 1 if the time-stamp corresponds to a valid
@@ -226,6 +235,9 @@ class ContactDataset(Dataset):
             human_day_info = self.read(human_idx, day_idx)
         else:
             day_idx = human_day_info["current_day"]
+        if human_idx is None:
+            human_idx = -1
+
         # -------- Encounters --------
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.
@@ -333,6 +345,8 @@ class ContactDataset(Dataset):
             encounter_day = encounter_day - day_idx
         # This should be it
         return Dict(
+            human_idx=torch.from_numpy(np.array([human_idx])),
+            day_idx=torch.from_numpy(np.array([day_idx])),
             health_history=torch.from_numpy(health_history).float(),
             health_profile=torch.from_numpy(health_profile).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
@@ -446,6 +460,31 @@ class ContactDataset(Dataset):
     def __del__(self):
         if self._preloaded is not None:
             self._preloaded.close()
+
+
+class ContactPreprocessor(ContactDataset):
+    def __init__(self, **kwargs):
+        # noinspection PyTypeChecker
+        super(ContactPreprocessor, self).__init__(path=None, **kwargs)
+        self._num_humans = 1
+        self._num_days = 1
+
+    def _read_data(self):
+        # Defuse this method since it's not needed anymore
+        pass
+
+    def preprocess(self, human_day_info, as_batch=True):
+        # noinspection PyTypeChecker
+        sample = self.get(None, None, human_day_info=human_day_info)
+        if as_batch:
+            sample = self.collate_fn([sample])
+        return sample
+
+    def __len__(self):
+        raise NotImplementedError
+
+    def __getitem__(self, item):
+        raise NotImplementedError
 
 
 class ContactPreprocessor(ContactDataset):

@@ -75,14 +75,16 @@ def pad_messages_minibatch(batch, target_nb_messages):
     return padded_batch
 
 
-def convert_pytorch_model(pytorch_model, working_directory="./tmp_tfmodel_conversion/"):
+def convert_pytorch_model(pytorch_model, working_directory="./tmp_tfmodel_conversion/",
+                          dataset_path="./data/1k-1-output.zip"):
+
     for nb_messages in NB_MESSAGES_BUCKETS:
         convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
-                                             working_directory)
+                                             working_directory, dataset_path)
 
 
 def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
-                                         working_directory="./tmp_tfmodel_conversion/"):
+                                         working_directory, dataset_path):
 
     # Make sure we are converting the inference graph
     pytorch_model.eval()
@@ -92,9 +94,8 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
         os.makedirs(working_directory)
 
     # Load dataset (used for sanity checking the converted models)
-    path = "./data/1k-1-output/"
-    dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0, path=path,
-                                bit_encoded_age=False)
+    dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0,
+                                path=dataset_path, bit_encoded_age=True)
     batch = next(iter(dataloader))
 
     # Get a padded batch to use for the conversion to TF and TFLite
