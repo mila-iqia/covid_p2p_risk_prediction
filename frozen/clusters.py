@@ -3,7 +3,6 @@ import numpy as np
 import operator
 from collections import defaultdict
 from scipy.stats import wasserstein_distance as dist
-#import config
 from frozen.utils import Message, decode_message, encode_message, decode_update_message, hash_to_cluster, compare_uids
 
 class Clusters:
@@ -46,7 +45,7 @@ class Clusters:
         for i in range(current_day-3, current_day+1):
             for cluster_id, messages in self.clusters_by_day[i].items():
                 for m_enc in messages:
-                    obs_uid, risk, day, unobs_uid = decode_message(m_enc)
+                    obs_uid, risk, day, unobs_uid, has_app = decode_message(m_enc)
                     if m_new.uid == obs_uid and m_new.day == day:
                         best_cluster = cluster_id
                         best_message = m_enc
@@ -138,10 +137,6 @@ class Clusters:
 
     def update_records(self, update_messages, human):
         # if we're using naive tracing, we actually don't care which records we update
-
-        #if not config.CLUSTER_MESSAGES and config.CLUSTER_TYPE == "heuristic":
-        #    for update_message in update_messages:
-        #        self.clusters_by_day
         if not update_messages:
             return self
         grouped_update_messages = self.group_by_received_at(update_messages)

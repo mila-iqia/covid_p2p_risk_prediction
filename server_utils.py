@@ -84,7 +84,7 @@ class InferenceWorker(threading.Thread):
                 hdi = pickle.loads(buffer)
                 output, human = None, None
                 try:
-                    if 'risk_model' not in hdi or hdi['risk_model'] == "naive":
+                    if 'risk_model' not in hdi or hdi['risk_model'] == "first order probabilistic tracing":
                         output, human = proc_human(hdi)
                     elif hdi['risk_model'] == "transformer":
                         output, human = proc_human(hdi)
@@ -219,7 +219,6 @@ class InferenceClient:
 
 def proc_human(params):
     """(Pre-)Processes the received simulator data for a single human."""
-
     if all([p in params for p in expected_processed_packet_param_names]):
         return params, None  # probably fetching data from data loader; skip stuff below
 
