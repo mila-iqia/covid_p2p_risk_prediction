@@ -110,13 +110,13 @@ class InferenceWorker(threading.Thread):
         self.stop_flag.set()
 
     @staticmethod
-    def process_sample(hdi, engine, mp_backend, mp_threads):
+    def process_sample(hdi, engine, mp_backend=None, mp_threads=0):
         if isinstance(hdi, list):
             batch_proc_human = all([
                 'risk_model' in h and h['risk_model'] == "first order probabilistic tracing"
                 for h in hdi
             ])
-            if batch_proc_human:
+            if batch_proc_human and mp_threads > 0:
                 import joblib
                 with joblib.Parallel(
                         n_jobs=mp_threads,
@@ -126,7 +126,7 @@ class InferenceWorker(threading.Thread):
                     results = parallel((joblib.delayed(proc_human)(h) for h in hdi))
                 return [(r[1]['name'], r[1]['risk'], r[1]['clusters']) for r in results]
             else:
-                return [InferenceWorker.process_sample(h, engine) for h in hdi]
+                return [InferenceWorker.process_sample(h, engine, mp_backend, mp_threads) for h in hdi]
         assert isinstance(hdi, dict), "unexpected input data format"
         output, human = None, None
         try:
