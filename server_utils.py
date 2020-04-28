@@ -81,7 +81,8 @@ class InferenceWorker(threading.Thread):
             if socket in evts and evts[socket] == zmq.POLLIN:
                 proc_start_time = time.time()
                 address, empty, buffer = socket.recv_multipart()
-                response = self.process_sample(buffer, engine)
+                hdi = pickle.loads(buffer)
+                response = self.process_sample(hdi, engine)
                 response = pickle.dumps(response)
                 self.packet_counter.increment()
                 self.time_counter.increment(time.time() - proc_start_time)
@@ -105,13 +106,12 @@ class InferenceWorker(threading.Thread):
 
     @staticmethod
     def process_sample(hdi, engine):
-        if isinstance(hdi, bytes):
-            hdi = pickle.loads(hdi)
         if isinstance(hdi, list):
             return [InferenceWorker.process_sample(h, engine) for h in hdi]
+        assert isinstance(hdi, dict), "unexpected input data format"
         output, human = None, None
         try:
-            if 'risk_model' not in hdi or hdi['risk_model'] == "naive":
+            if 'risk_model' not in hdi or hdi['risk_model'] == "first order probabilistic tracing":
                 output, human = proc_human(hdi)
             elif hdi['risk_model'] == "transformer":
                 output, human = proc_human(hdi)
