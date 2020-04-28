@@ -65,7 +65,7 @@ class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
 
     @property
     def device(self):
-        return self.get("device", "cpu")
+        return self.get("device", "cuda" if torch.cuda.is_available() else "cpu")
 
     @register_default_dispatch
     def train(self):

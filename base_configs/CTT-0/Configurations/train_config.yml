@@ -1,5 +1,3 @@
-device: "cuda"
-
 data:
   paths:
     train: "./data/1k-1-output"
