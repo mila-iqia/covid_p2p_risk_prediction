@@ -30,8 +30,6 @@ model:
     num_heads: 4
     sab_capacity: 128
     num_sabs: 2
-    pool_latent_entities: false
-    use_logit_sink: false
     encounter_output_features: 1
     latent_variable_output_features: 1
 
@@ -45,12 +43,16 @@ losses:
     contagion: 1.
 
 optim:
-  name: "Adam"
+  name: "WarmCosineAdam"
   kwargs:
     lr: 0.0001
+    num_steps: 100000
+    num_warmup_steps: 5000
+    eta_min: 0.00001
+    eta_max: 0.0008
 
 training:
-  num_epochs: 20
+  num_epochs: 40
 
 wandb:
   use: true
