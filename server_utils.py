@@ -53,6 +53,8 @@ class InferenceWorker(threading.Thread):
             self,
             experiment_directory: typing.AnyStr,
             identifier: typing.Any,
+            mp_backend: typing.AnyStr,
+            mp_threads: int,
             context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
@@ -61,6 +63,8 @@ class InferenceWorker(threading.Thread):
         self.stop_flag = threading.Event()
         self.packet_counter = AtomicCounter(init=0)
         self.time_counter = AtomicCounter(init=0.)
+        self.mp_backend = mp_backend
+        self.mp_threads = mp_threads
         if context is None:
             context = zmq.Context()
         self.context = context
@@ -82,7 +86,8 @@ class InferenceWorker(threading.Thread):
                 proc_start_time = time.time()
                 address, empty, buffer = socket.recv_multipart()
                 hdi = pickle.loads(buffer)
-                response = self.process_sample(hdi, engine)
+                response = self.process_sample(
+                    hdi, engine, self.mp_backend, self.mp_threads)
                 response = pickle.dumps(response)
                 self.packet_counter.increment()
                 self.time_counter.increment(time.time() - proc_start_time)
@@ -105,9 +110,23 @@ class InferenceWorker(threading.Thread):
         self.stop_flag.set()
 
     @staticmethod
-    def process_sample(hdi, engine):
+    def process_sample(hdi, engine, mp_backend, mp_threads):
         if isinstance(hdi, list):
-            return [InferenceWorker.process_sample(h, engine) for h in hdi]
+            batch_proc_human = all([
+                'risk_model' in h and h['risk_model'] == "first order probabilistic tracing"
+                for h in hdi
+            ])
+            if batch_proc_human:
+                import joblib
+                with joblib.Parallel(
+                        n_jobs=mp_threads,
+                        backend=mp_backend,
+                        batch_size="auto",
+                        prefer="threads") as parallel:
+                    results = parallel((joblib.delayed(proc_human)(h) for h in hdi))
+                return [(r[1]['name'], r[1]['risk'], r[1]['clusters']) for r in results]
+            else:
+                return [InferenceWorker.process_sample(h, engine) for h in hdi]
         assert isinstance(hdi, dict), "unexpected input data format"
         output, human = None, None
         try:
@@ -131,10 +150,12 @@ class InferenceServerManager(threading.Thread):
     def __init__(
             self,
             model_exp_path: typing.AnyStr,
-            workers: int = 1,
-            port: int = 6688,
+            workers: int,
+            mp_backend: typing.AnyStr,
+            mp_threads: int,
+            port: int,
             verbose: bool = False,
-            verbose_print_delay: float = 30.,
+            verbose_print_delay: float = 5.,
             context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
@@ -142,6 +163,8 @@ class InferenceServerManager(threading.Thread):
             context = zmq.Context()
         self.context = context
         self.workers = workers
+        self.mp_backend = mp_backend
+        self.mp_threads = mp_threads
         self.port = port
         self.model_exp_path = model_exp_path
         self.stop_flag = threading.Event()
@@ -157,7 +180,13 @@ class InferenceServerManager(threading.Thread):
         worker_map = {}
         for worker_idx in range(self.workers):
             worker_id = f"worker:{worker_idx}"
-            worker = InferenceWorker(self.model_exp_path, worker_id, context=self.context)
+            worker = InferenceWorker(
+                self.model_exp_path,
+                worker_id,
+                self.mp_backend,
+                self.mp_threads,
+                context=self.context
+            )
             worker_map[worker_id] = worker
             worker.start()
         available_worker_ids = []
