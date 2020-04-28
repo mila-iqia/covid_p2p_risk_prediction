@@ -56,3 +56,6 @@ training:
 wandb:
   use: true
   log_every: 50
+
+tensorboard:
+  log_scalars_every: 10

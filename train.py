@@ -6,7 +6,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from speedrun import BaseExperiment, IOMixin, register_default_dispatch
+from speedrun import (
+    BaseExperiment,
+    IOMixin,
+    TensorboardMixin,
+    register_default_dispatch,
+)
 from speedrun.logging.wandb import WandBMixin
 
 from models import ContactTracingTransformer
@@ -17,7 +22,7 @@ from metrics import Metrics
 import opts
 
 
-class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
+class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
     WANDB_PROJECT = "ctt"
 
     def __init__(self):
@@ -50,9 +55,7 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         # noinspection PyArgumentList
         self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
         optim_cls = getattr(opts, self.get("optim/name", "Adam"))
-        self.optim = optim_cls(
-            self.model.parameters(), **self.get("optim/kwargs")
-        )
+        self.optim = optim_cls(self.model.parameters(), **self.get("optim/kwargs"))
         self.metrics = Metrics()
 
     def _build_scheduler(self):
@@ -129,14 +132,15 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         return all_losses_and_metrics
 
     def log_training_losses(self, losses):
-        if not self.get("wandb/use", True):
-            return self
-        if self.log_wandb_now:
+        if self.log_wandb_now and self.get("wandb/use", False):
             metrics = Dict({"training_loss": losses.loss})
             metrics.update(
                 {f"training_{k}": v for k, v in losses.unweighted_losses.items()}
             )
             self.wandb_log(**metrics)
+        if self.log_scalars_now:
+            for key, value in losses.unweighted_losses.items():
+                self.log_scalar(f"training/{key}", value)
         return self
 
     def checkpoint(self, force=False):
@@ -174,10 +178,11 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         return self
 
     def log_validation_losses_and_metrics(self, losses):
-        if not self.get("wandb/use", True):
-            return self
-        metrics = {f"validation_{k}": v for k, v in losses.items()}
-        self.wandb_log(**metrics)
+        if self.get("wandb/use", False):
+            metrics = {f"validation_{k}": v for k, v in losses.items()}
+            self.wandb_log(**metrics)
+        for key, value in losses.items():
+            self.log_scalar(f"validation/{key}", value)
         return self
 
     def clear_moving_averages(self):
@@ -189,13 +194,14 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         return self
 
     def log_learning_rates(self):
-        if not self.get("wandb/use", True):
-            return self
         lrs = {
             f"lr_{i}": param_group["lr"]
             for i, param_group in enumerate(self.optim.param_groups)
         }
-        self.wandb_log(**lrs)
+        if self.get("wandb/use", False):
+            self.wandb_log(**lrs)
+        for key, value in lrs:
+            self.log_scalar(f"training/{key}", value)
         return self
 
 
