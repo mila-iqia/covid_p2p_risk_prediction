@@ -26,23 +26,13 @@ class Tests(unittest.TestCase):
             self.assertEqual(output.latent_variable.shape[0], batch_size)
             self.assertEqual(output.encounter_variables.shape[0], batch_size)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False, use_logit_sink=False
-        )
+        ctt = ContactTracingTransformer()
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False,
-            use_logit_sink=False,
-            use_encounter_partner_id_embedding=False,
-        )
+        ctt = ContactTracingTransformer(use_encounter_partner_id_embedding=False,)
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False,
-            use_logit_sink=False,
-            use_learned_time_embedding=True,
-        )
+        ctt = ContactTracingTransformer(use_learned_time_embedding=True,)
         test_output(ctt)
 
     def test_losses(self):
@@ -60,9 +50,7 @@ class Tests(unittest.TestCase):
         )
         batch = next(iter(dataloader))
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False, use_logit_sink=False
-        )
+        ctt = ContactTracingTransformer()
         output = Dict(ctt(batch))
 
         loss_fn = ContagionLoss(allow_multiple_exposures=True)

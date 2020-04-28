@@ -25,10 +25,7 @@ class _ContactTracingTransformer(nn.Module):
         partner_id_embedding: Union[nn.Module, None],
         message_embedding: nn.Module,
         self_attention_blocks: nn.ModuleList,
-        self_latent_variable_pooler: Union[nn.Module, None],
         latent_variable_mlp: nn.Module,
-        encounter_logit_sink_pooler: Union[nn.Module, None],
-        logit_sink_mlp: Union[nn.Module, None],
         encounter_mlp: nn.Module,
         entity_masker: nn.Module,
         message_placeholder: nn.Parameter,
@@ -43,10 +40,7 @@ class _ContactTracingTransformer(nn.Module):
         self.partner_id_embedding = partner_id_embedding
         self.message_embedding = message_embedding
         self.self_attention_blocks = self_attention_blocks
-        self.self_latent_variable_pooler = self_latent_variable_pooler
         self.latent_variable_mlp = latent_variable_mlp
-        self.encounter_logit_sink_pooler = encounter_logit_sink_pooler
-        self.logit_sink_mlp = logit_sink_mlp
         self.encounter_mlp = encounter_mlp
         self.entity_masker = entity_masker
         self.message_placeholder = message_placeholder
@@ -55,6 +49,21 @@ class _ContactTracingTransformer(nn.Module):
 
     def forward(self, inputs):
         """
+        inputs is a dict containing the below keys. The format of the tensors
+        are indicated as e.g. `BTC`, `BMC` (etc), which can be interpreted as
+        following.
+            B: batch size,
+            T: size of the rolling window over health history (i.e. number of
+               time-stamps),
+            C: number of generic channels,
+            M: number of encounters,
+        Elements with pre-determined shapes are indicated as such.
+        For example:
+            - B(14) indicates a tensor of shape (B, 14),
+            - BM1 indicates a tensor of shape (B, M, 1)
+            - B(T=14)C indicates a tensor of shape (B, 14, C) where 14
+                is the currently set size of the rolling window.
+
         Parameters
         ----------
         inputs : dict
@@ -188,41 +197,14 @@ class _ContactTracingTransformer(nn.Module):
             entities = self.entity_masker(entities, expanded_mask)
             # Append meta-data for the next round of message passing
             entities = torch.cat([meta_data, entities], dim=2)
-        # -------- Entity Pooling --------
         # -------- Latent Variables
-        # Pool the self entities together to predict one latent variable (if required)
-        if self.self_latent_variable_pooler is not None:
-            pre_latent_variable = self.self_latent_variable_pooler(
-                entities[:, num_encounters:]
-            )
-            assert pre_latent_variable.shape[1] == 1
-            pre_latent_variable = pre_latent_variable.reshape(
-                batch_size, pre_latent_variable.shape[2]
-            )
-        else:
-            pre_latent_variable = entities[:, num_encounters:]
+        pre_latent_variable = entities[:, num_encounters:]
         # Push through the latent variable MLP to get the latent variables
-        # latent_variable.shape = BC
+        # latent_variable.shape = BTC
         latent_variable = self.latent_variable_mlp(pre_latent_variable)
-        # -------- Logit sink
-        if self.encounter_logit_sink_pooler is not None:
-            pre_logit_sink = self.encounter_logit_sink_pooler(entities)
-            assert pre_logit_sink.shape[1] == 1
-            # logit_sink.shape = B1C
-            assert self.logit_sink_mlp is not None
-            logit_sink = self.logit_sink_mlp(pre_logit_sink)
-        else:
-            assert self.logit_sink_mlp is None
-            logit_sink = torch.zeros(
-                (batch_size, 0, entities.shape[2] - meta_data_dim),
-                dtype=entities.dtype,
-                device=entities.device,
-            )
         # -------- Generate Output Variables --------
         # Process encounters to their variables
-        pre_encounter_variables = torch.cat(
-            [entities[:, :num_encounters, meta_data_dim:], logit_sink], dim=1
-        )
+        pre_encounter_variables = entities[:, :num_encounters, meta_data_dim:]
         encounter_variables = self.encounter_mlp(pre_encounter_variables)
         # Done: pack to an addict and return
         results = dict()
@@ -242,14 +224,14 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         health_history_embedding_dim=64,
         num_health_profile_features=14,
         health_profile_embedding_dim=32,
-        use_learned_time_embedding=False,
+        use_learned_time_embedding=True,
         time_embedding_dim=32,
         encounter_duration_embedding_dim=32,
-        encounter_duration_embedding_mode="thermo",
+        encounter_duration_embedding_mode="sines",
         encounter_duration_thermo_range=(0.0, 6.0),
         encounter_duration_num_thermo_bins=32,
         num_encounter_partner_id_bits=16,
-        use_encounter_partner_id_embedding=True,
+        use_encounter_partner_id_embedding=False,
         encounter_partner_id_embedding_dim=32,
         message_dim=8,
         message_embedding_dim=128,
@@ -257,9 +239,6 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         num_heads=4,
         sab_capacity=128,
         num_sabs=2,
-        # Meta config
-        pool_latent_entities=False,
-        use_logit_sink=False,
         # Output
         encounter_output_features=1,
         latent_variable_output_features=1,
@@ -350,25 +329,8 @@ class ContactTracingTransformer(_ContactTracingTransformer):
                 )
             )
         self_attention_blocks = nn.ModuleList(self_attention_blocks)
-        # Build the entity poolers
-        if pool_latent_entities:
-            self_latent_variable_pooler = attn.PMA(
-                dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
-            )
-        else:
-            self_latent_variable_pooler = None
-        if use_logit_sink:
-            encounter_logit_sink_pooler = attn.PMA(
-                dim=sab_capacity + sab_metadata_dim, num_seeds=1, num_heads=num_heads
-            )
-        else:
-            encounter_logit_sink_pooler = None
         # ------- Output processors -------
         # Encounter
-        if use_logit_sink:
-            logit_sink_mlp = nn.Linear(sab_capacity + sab_metadata_dim, sab_capacity)
-        else:
-            logit_sink_mlp = None
         encounter_mlp = nn.Sequential(
             nn.Linear(sab_capacity, capacity),
             nn.ReLU(),
@@ -402,10 +364,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             partner_id_embedding=partner_id_embedding,
             message_embedding=message_embedding,
             self_attention_blocks=self_attention_blocks,
-            self_latent_variable_pooler=self_latent_variable_pooler,
             latent_variable_mlp=latent_variable_mlp,
-            encounter_logit_sink_pooler=encounter_logit_sink_pooler,
-            logit_sink_mlp=logit_sink_mlp,
             encounter_mlp=encounter_mlp,
             entity_masker=entity_masker,
             message_placeholder=message_placeholder,
