@@ -29,10 +29,13 @@ class Tests(unittest.TestCase):
         ctt = ContactTracingTransformer()
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(use_encounter_partner_id_embedding=False,)
+        ctt = ContactTracingTransformer(use_encounter_partner_id_embedding=False)
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(use_learned_time_embedding=True,)
+        ctt = ContactTracingTransformer(use_learned_time_embedding=True)
+        test_output(ctt)
+
+        ctt = ContactTracingTransformer(encounter_duration_embedding_mode="sines")
         test_output(ctt)
 
     def test_model_padding(self):
@@ -40,7 +43,8 @@ class Tests(unittest.TestCase):
         from loader import ContactDataset
         from torch.utils.data import DataLoader
         from models import ContactTracingTransformer
-        from addict import Dict
+
+        torch.random.manual_seed(42)
 
         batch_size = 5
         path = self.DATASET_PATH
