@@ -43,7 +43,7 @@ class Clusters:
         best_cluster = hash_to_cluster(m_new)
         best_message = None
         best_score = -1
-        for i in range(current_day - 3, current_day + 1):
+        for i in range(current_day - 3, current_day + 1, -1):
             for cluster_id, messages in self.clusters_by_day[i].items():
                 for m_enc in messages:
                     obs_uid, risk, day, unobs_uid, has_app = decode_message(m_enc)
