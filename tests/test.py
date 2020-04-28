@@ -6,7 +6,7 @@ class Tests(unittest.TestCase):
     DATASET_PATH = "../data/1k-1-output"
     NUM_KEYS_IN_BATCH = 15
 
-    def test_model(self):
+    def test_model_runs(self):
         from loader import ContactDataset
         from torch.utils.data import DataLoader
         from models import ContactTracingTransformer
@@ -34,6 +34,57 @@ class Tests(unittest.TestCase):
 
         ctt = ContactTracingTransformer(use_learned_time_embedding=True,)
         test_output(ctt)
+
+    def test_model_padding(self):
+        import torch
+        from loader import ContactDataset
+        from torch.utils.data import DataLoader
+        from models import ContactTracingTransformer
+        from addict import Dict
+
+        batch_size = 5
+        path = self.DATASET_PATH
+        dataset = ContactDataset(path)
+        dataloader = DataLoader(
+            dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
+        )
+        batch = next(iter(dataloader))
+
+        # Padding test -- pad everything that has to do with encounters, and check
+        # whether it changes results
+        pad_size = 1
+
+        def pad(tensor):
+            if tensor.dim() == 3:
+                zeros = torch.zeros(
+                    (tensor.shape[0], pad_size, tensor.shape[2]), dtype=tensor.dtype
+                )
+            else:
+                zeros = torch.zeros((tensor.shape[0], pad_size), dtype=tensor.dtype)
+            return torch.cat([tensor, zeros], dim=1)
+
+        padded_batch = {
+            key: (pad(tensor) if key.startswith("encounter") else tensor)
+            for key, tensor in batch.items()
+        }
+        # Pad the mask
+        padded_batch["mask"] = pad(padded_batch["mask"])
+
+        # Make the model and set it to eval
+        # noinspection PyUnresolvedReferences
+        ctt = ContactTracingTransformer().eval()
+        with torch.no_grad():
+            output = ctt(batch)
+            padded_output = ctt(padded_batch)
+
+        encounter_soll_wert = output["encounter_variables"][..., 0]
+        encounter_ist_wert = padded_output["encounter_variables"][..., :-pad_size, 0]
+        latent_soll_wert = output["latent_variable"]
+        latent_ist_wert = padded_output["latent_variable"]
+        self.assertSequenceEqual(encounter_soll_wert.shape, encounter_ist_wert.shape)
+        self.assertSequenceEqual(latent_ist_wert.shape, latent_soll_wert.shape)
+        self.assert_(torch.allclose(encounter_soll_wert, encounter_ist_wert))
+        self.assert_(torch.allclose(latent_soll_wert, latent_ist_wert))
 
     def test_losses(self):
         from loader import ContactDataset
