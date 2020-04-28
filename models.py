@@ -351,3 +351,8 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             message_placeholder=message_placeholder,
             partner_id_placeholder=partner_id_placeholder,
         )
+
+
+if __name__ == '__main__':
+    model = ContactTracingTransformer()
+    torch.save(model.state_dict(),"./model.pth")
