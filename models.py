@@ -49,6 +49,21 @@ class _ContactTracingTransformer(nn.Module):
 
     def forward(self, inputs):
         """
+        inputs is a dict containing the below keys. The format of the tensors
+        are indicated as e.g. `BTC`, `BMC` (etc), which can be interpreted as
+        following.
+            B: batch size,
+            T: size of the rolling window over health history (i.e. number of
+               time-stamps),
+            C: number of generic channels,
+            M: number of encounters,
+        Elements with pre-determined shapes are indicated as such.
+        For example:
+            - B(14) indicates a tensor of shape (B, 14),
+            - BM1 indicates a tensor of shape (B, M, 1)
+            - B(T=14)C indicates a tensor of shape (B, 14, C) where 14
+                is the currently set size of the rolling window.
+
         Parameters
         ----------
         inputs : dict
