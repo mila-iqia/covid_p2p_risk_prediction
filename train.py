@@ -211,7 +211,7 @@ class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
         }
         if self.get("wandb/use", False):
             self.wandb_log(**lrs)
-        for key, value in lrs:
+        for key, value in lrs.items():
             self.log_scalar(f"training/{key}", value)
         return self
 
