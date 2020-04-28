@@ -9,6 +9,7 @@ data:
     relative_days: true
     bit_encoded_age: false
     clip_history_days: false
+    preload: false      # Set this to true if you have massive RAM
 
 model:
   kwargs:
