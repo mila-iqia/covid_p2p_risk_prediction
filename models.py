@@ -242,7 +242,7 @@ class ContactTracingTransformer(_ContactTracingTransformer):
         dropout=0.1,
         num_health_history_features=13,
         health_history_embedding_dim=64,
-        num_health_profile_features=14,
+        num_health_profile_features=7,
         health_profile_embedding_dim=32,
         use_learned_time_embedding=True,
         time_embedding_dim=32,
