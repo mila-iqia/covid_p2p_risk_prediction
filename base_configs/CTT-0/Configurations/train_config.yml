@@ -1,5 +1,3 @@
-device: "cuda"
-
 data:
   paths:
     train: "./data/1k-1-output"
@@ -9,29 +7,32 @@ data:
     shuffle: true
     num_workers: 1
     relative_days: true
+    bit_encoded_age: false
+    clip_history_days: false
+    preload: false      # Set this to true if you have massive RAM
 
 model:
   kwargs:
     capacity: 128
     dropout: 0.1
     num_health_history_features: 13
-    health_history_embedding_dim: 32
-    num_health_profile_features: 14
+    health_history_embedding_dim: 64
+    num_health_profile_features: 7
     health_profile_embedding_dim: 32
-    encounter_duration_embedding_mode: "thermo"
-    encounter_duration_thermo_range: [0.0, 6.0]
-    encounter_duration_num_thermo_bins: 32
+    use_learned_time_embedding: true
     time_embedding_dim: 32
     encounter_duration_embedding_dim: 32
+    encounter_duration_embedding_mode: "sines"    # Options: {"sines", "thermo"}
+    encounter_duration_thermo_range: [0.0, 6.0]
+    encounter_duration_num_thermo_bins: 32
     num_encounter_partner_id_bits: 16
+    use_encounter_partner_id_embedding: false
     encounter_partner_id_embedding_dim: 32
     message_dim: 8
-    message_embedding_dim: 32
+    message_embedding_dim: 128
     num_heads: 4
     sab_capacity: 128
     num_sabs: 2
-    pool_latent_entities: false
-    use_logit_sink: false
     encounter_output_features: 1
     latent_variable_output_features: 1
 
@@ -45,13 +46,22 @@ losses:
     contagion: 1.
 
 optim:
-  name: "Adam"
+  name: "WarmCosineAdam"
   kwargs:
-    lr: 0.0001
+    num_steps: 100000
+    num_warmup_steps: 5000
+    eta_min: 0.000008
+    eta_max: 0.0008
 
 training:
-  num_epochs: 20
+  num_epochs: 40
+  checkpoint:
+    every: 5
+    if_best: true
 
 wandb:
-  use: true
+  use: false
   log_every: 50
+
+tensorboard:
+  log_scalars_every: 10
