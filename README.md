@@ -76,21 +76,23 @@ Inputs and targets are described for 1 data example (1 person), from the point o
     - `day` [0-13] day of the encounter, 0 being today and 13 being 14 days ago
 
 **Targets:** 
-* Classification of infection status:
-    - Binary variable 0/1 of whether Alice is infected
+* Classification of infection status: *N_e* + 1 array which is a multinomial of all encounters + a special "null" encounter, structured as follows:
     - (*N_e*) binary array 0/1 for each encounter, where the target is 1 if Alice was infected by that Bob encounter and 0 if they are were not
+    - Binary variable 0/1 for the special "null" encounter, which indicates whether Alice has been infected by any of the *N_e* encounters; 0 if not, 1 if so
+    
 * Regression of personal infectiousness: (14) array of floats of Alice's infectiousness for each of the past 14 days
 
 **Metrics:** 
 
 * **P**: Precision is of the top 1% of highest-risk people, what % are correctly identified as being infected
 * **P-U**: Precision-Untested is of the top 1% of highest-risk people, excluding those who have a positive test, what % are correctly identified as being infected
-* **P-A**: Precision-Asymptomatic is of the top 1% of highest-risk people, excluding those who have a positive test and those who have symptoms, what % are correctly identified as being infected
+* **P-UA**: Precision-Asymptomatic is of the top 1% of highest-risk people, excluding those who have a positive test and those who have symptoms, what % are correctly identified as being infected
 * **R**: Recall is what % of those infected are correctly identified as being infected
 * **R-U**: Recall-Untested is what % of those infected are correctly identified as being infected, among people who have not been tested
-* **R-A** Recall-Asymptomatic is what % of those infected are correctly identified as being infected, among people who are asymptomatic
-* **MSE**: is Mean Squared Error, between the target risk and the prediction for the infectiousness of each person. (Possibly N/A for non-ML methods)
-* **MRR**: is Mean Reciprocal Rank TODO
+* **R-UA**: Recall-Asymptomatic is what % of those infected are correctly identified as being infected, excluding those who have symptoms and those who have a positive test
+* **EIE**: Expected Infectiousness Error: difference between the expected infectiousness target infectiousnes
+* **MSE**: is Mean Squared Error, between the target infectiousness and the prediction for the infectiousness of each Alice. (Possibly N/A for non-ML methods).
+* **MRR**: is Mean Reciprocal Rank, where the predictions of being infected in each encounter (including the special "null" encounter) are ranked. The target is to put the infection encounter top in the ranking, or put the null encounter top if none of the encounters resulted in infection. (Possibly N/A for non-ML methods).
 
 
 ## Results 
