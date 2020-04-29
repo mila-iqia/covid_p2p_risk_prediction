@@ -148,7 +148,7 @@ class Clusters:
                     for message in messages:
                         if message == old_message_enc:
                             old_cluster = cluster
-                            print(old_cluster)
+                            #print(old_cluster)
                             break
                     if old_cluster:
                         break
