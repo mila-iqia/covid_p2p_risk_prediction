@@ -15,7 +15,7 @@ from risk_models import RiskModelTristan
 
 expected_raw_packet_param_names = [
     "start", "current_day", "all_possible_symptoms", "human",
-    "COLLECT_LOGS", "log_path", "risk_model"
+    "COLLECT_TRAINING_DATA", "log_path", "risk_model"
 ]
 
 expected_processed_packet_param_names = [
@@ -304,7 +304,7 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
         }
     }
 
-    if params["COLLECT_LOGS"]:
+    if params["COLLECT_TRAINING_DATA"]:
         os.makedirs(params["log_path"], exist_ok=True)
         with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
             pickle.dump(daily_output, fd)
