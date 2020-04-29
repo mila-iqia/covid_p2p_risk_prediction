@@ -152,7 +152,7 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
     converter.allow_custom_ops=True
     converter.experimental_new_converter=True
     converter.enable_mlir_converter=True
-    converter.optimizations = [tf.lite.Optimize.DEFAULT] # 8-bits weight quantization
+    #converter.optimizations = [tf.lite.Optimize.DEFAULT] # 8-bits weight quantization
     tflite_model = converter.convert()
     tflite_model_path = os.path.join(working_directory, "model_%i_messages.tflite" % nb_messages)
     open(tflite_model_path, "wb").write(tflite_model)
