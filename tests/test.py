@@ -3,12 +3,9 @@ import unittest
 
 class Tests(unittest.TestCase):
 
-    DATASET_PATH = "../data/1k-1-output"
-    ZIP_PATH = (
-        "../data/covi-1k-04-27/"
-        "sim_v2_people-1000_days-60_init-0.01_seed-1_20200427-100605/"
-        "output.zip"
-    )
+    DATASET_PATH = (
+        ZIP_PATH
+    ) = "../data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-0_20200429-143659-output.zip"
     NUM_KEYS_IN_BATCH = 15
 
     def test_model_runs(self):
@@ -168,10 +165,10 @@ class Tests(unittest.TestCase):
                 len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
             )
             self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
-            self.assertEqual(dataset.extract(sample, "age").shape[-1], 8)
+            self.assertEqual(dataset.extract(sample, "age").shape[-1], 1)
             self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
             self.assertEqual(
-                dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 12
+                dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 28
             )
             self.assertEqual(
                 dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
@@ -179,10 +176,6 @@ class Tests(unittest.TestCase):
 
         sample = dataset.get(890, 5)
         validate(sample)
-
-        dataset = ContactDataset(self.ZIP_PATH)
-        sample = dataset.get(420, 40)
-        pass
 
 
 if __name__ == "__main__":
