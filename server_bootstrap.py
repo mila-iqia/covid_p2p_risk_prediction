@@ -10,8 +10,8 @@ import time
 import server_utils
 
 default_port = 6688
-default_workers = 1
-default_threads = 8
+default_workers = 4
+default_threads = 4
 default_model_exp_path = os.path.abspath("exp/DEBUG-0")
 default_mp_backend = "loky"
 
