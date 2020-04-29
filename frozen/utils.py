@@ -70,7 +70,6 @@ def hash_to_cluster_day(message):
 	bin_risk = "{0:b}".format(message.risk).zfill(4)
 
 	for days_apart in range(0, 4):
-		print(days_apart)
 		if days_apart == 0:
 			binary = "".join([bin_uid, bin_risk])
 			cluster_id = int(binary, 2)
@@ -93,5 +92,4 @@ def hash_to_cluster_day(message):
 				binary = "".join([bin_uid[:1] + possibility, bin_risk])
 				cluster_id = int(binary, 2)
 				clusters[days_apart].append(cluster_id)
-	print(clusters)
 	return clusters
