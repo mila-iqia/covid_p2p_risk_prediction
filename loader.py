@@ -396,7 +396,9 @@ class ContactDataset(Dataset):
         assert infectiousness_history.ndim == 1
         if infectiousness_history.shape[0] < 14:
             infectiousness_history = np.pad(
-                infectiousness_history, ((0, 14 - infectiousness_history.shape[0]),)
+                infectiousness_history,
+                ((0, 14 - infectiousness_history.shape[0]),),
+                mode="constant",
             )
         assert infectiousness_history.shape[0] == 14
         return infectiousness_history[:, None]
