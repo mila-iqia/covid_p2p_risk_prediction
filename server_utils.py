@@ -290,6 +290,7 @@ def proc_human(params):
         "unobserved": {
             "true_symptoms": true_symptoms,
             "is_exposed": is_exposed,
+            "exposure_encounter": exposure_encounter,
             "exposure_day": exposure_day,
             "is_recovered": is_recovered,
             "recovery_day": recovery_day,
@@ -299,10 +300,8 @@ def proc_human(params):
             "true_sex": frozen.helper.encode_sex(human["sex"])
         }
     }
-
-    if params["COLLECT_LOGS"]:
-        os.makedirs(params["log_path"], exist_ok=True)
-        with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
-            pickle.dump(daily_output, fd)
+    os.makedirs(params["log_path"], exist_ok=True)
+    with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
+        pickle.dump(daily_output, fd)
 
     return daily_output, human
