@@ -126,13 +126,13 @@ class InferenceWorker(threading.Thread):
                         backend=mp_backend,
                         batch_size="auto",
                         prefer="threads") as parallel:
-                    results = parallel((joblib.delayed(proc_human)(human) for human in sample))
+                    results = parallel((joblib.delayed(proc_human)(human, engine) for human in sample))
                 return [(r['name'], r['risk'], r['clusters']) for r in results]
             else:
                 return [InferenceWorker.process_sample(human, engine, mp_backend, mp_threads) for human in sample]
         else:
             assert isinstance(sample, dict), "unexpected input data format"
-            results = proc_human(sample)
+            results = proc_human(sample, engine, mp_backend, mp_threads)
             if results is not None:
                 return (results['name'], results['risk'], results['clusters'])
             return None
@@ -250,7 +250,7 @@ class InferenceClient:
         return pickle.loads(self.socket.recv())
 
 
-def proc_human(params):
+def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     """(Pre-)Processes the received simulator data for a single human."""
     if all([p in params for p in expected_processed_packet_param_names]):
         return params, None  # probably fetching data from data loader; skip stuff below
@@ -312,7 +312,7 @@ def proc_human(params):
     inference_result = None
     if params['risk_model'] == "transformer":
         try:
-            inference_result = engine.infer(daily_output)
+            inference_result = inference_engine.infer(daily_output)
         except InvalidSetSize:
             pass  # return None for invalid samples
     if inference_result is not None:
