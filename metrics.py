@@ -145,7 +145,7 @@ class Metrics(nn.Module):
 
         return current_precision, current_recall
 
-    def evaluate(self, percentage_list=[0.01]):
+    def evaluate(self, percentage_list=[0.01, 0.5, 1.0]):
         precision_all = [0.0 for _ in percentage_list]
         precision_nottested = [0.0 for _ in percentage_list]
         precision_nottested_notsymptomatic = [0.0 for _ in percentage_list]
