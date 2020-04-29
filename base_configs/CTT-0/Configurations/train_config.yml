@@ -13,11 +13,10 @@ data:
       - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-8_20200429-143659-output.zip"
       - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-9_20200429-143659-output.zip"
   loader_kwargs:
-    batch_size: 8
+    batch_size: 64
     shuffle: true
-    num_workers: 1
+    num_workers: 8      # Set this to match the resources you have available
     relative_days: true
-    bit_encoded_age: false
     clip_history_days: false
     preload: false      # Set this to true if you have massive RAM
 
