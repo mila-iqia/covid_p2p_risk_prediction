@@ -30,6 +30,7 @@ import torch.nn.functional as F
 # (2) users who have not been tested;
 # (3) users who have not been tested and have not reported any symptoms.
 
+
 class Metrics(nn.Module):
     def __init__(self):
         super(Metrics, self).__init__()
@@ -154,7 +155,7 @@ class Metrics(nn.Module):
         recall_nottested_notsymptomatic = [0.0 for _ in percentage_list]
 
         for day_idx, status in self.status_prediction.items():
-            sorted_list = sorted(status, key=lambda x:x[1], reverse=True)
+            sorted_list = sorted(status, key=lambda x: x[1], reverse=True)
 
             # update precision and recall
             for k, percentage in enumerate(percentage_list):
@@ -171,7 +172,9 @@ class Metrics(nn.Module):
                 recall_nottested[k] += recall
 
                 # precision and recall for not tested and not symtomatic users
-                rank_list = [item for item in sorted_list if (item[3] == 0 and item[4] == 0)]
+                rank_list = [
+                    item for item in sorted_list if (item[3] == 0 and item[4] == 0)
+                ]
                 precision, recall = self.compute_pr(rank_list, percentage)
                 precision_nottested_notsymptomatic[k] += precision
                 recall_nottested_notsymptomatic[k] += recall
@@ -182,7 +185,7 @@ class Metrics(nn.Module):
             precision_nottested[k] /= len(self.status_prediction)
         for k in range(len(precision_nottested_notsymptomatic)):
             precision_nottested_notsymptomatic[k] /= len(self.status_prediction)
-        
+
         for k in range(len(recall_all)):
             recall_all[k] /= len(self.status_prediction)
         for k in range(len(recall_nottested)):
@@ -192,8 +195,7 @@ class Metrics(nn.Module):
 
         result = dict()
         result["mse"] = math.sqrt(
-            self.total_infectiousness_loss
-            / (self.total_infectiousness_count + 0.001)
+            self.total_infectiousness_loss / (self.total_infectiousness_count + 0.001)
         )
         result["mrr"] = self.total_encounter_mrr / self.total_encounter_count
         result["hit@1"] = self.total_encounter_hit1 / self.total_encounter_count
@@ -201,13 +203,19 @@ class Metrics(nn.Module):
             result["precision top_{} all_users".format(percentage)] = precision
         for percentage, precision in zip(percentage_list, precision_nottested):
             result["precision top_{} users_not_tested".format(percentage)] = precision
-        for percentage, precision in zip(percentage_list, precision_nottested_notsymptomatic):
-            result["precision top_{} users_not_tested_and_no_symptoms".format(percentage)] = precision
+        for percentage, precision in zip(
+            percentage_list, precision_nottested_notsymptomatic
+        ):
+            result[
+                "precision top_{} users_not_tested_and_no_symptoms".format(percentage)
+            ] = precision
         for percentage, recall in zip(percentage_list, recall_all):
             result["recall top_{} all_users".format(percentage)] = recall
         for percentage, recall in zip(percentage_list, recall_nottested):
             result["recall top_{} users_not_tested".format(percentage)] = recall
         for percentage, recall in zip(percentage_list, recall_nottested_notsymptomatic):
-            result["recall top_{} users_not_tested_and_no_symptoms".format(percentage)] = recall
+            result[
+                "recall top_{} users_not_tested_and_no_symptoms".format(percentage)
+            ] = recall
 
         return result
