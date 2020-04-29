@@ -1,7 +1,17 @@
 data:
   paths:
-    train: "./data/1k-1-output"
-    validate: "./data/1k-1-output"
+    train:
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-0_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-1_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-2_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-3_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-4_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-5_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-6_20200429-143659-output.zip"
+    validate:
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-7_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-8_20200429-143659-output.zip"
+      - "./data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-9_20200429-143659-output.zip"
   loader_kwargs:
     batch_size: 8
     shuffle: true
