@@ -68,6 +68,7 @@ class InferenceWorker(threading.Thread):
         if context is None:
             context = zmq.Context()
         self.context = context
+        self.init_time = None
 
     def run(self):
         # import frozen modules with classes required for unpickling
@@ -80,6 +81,7 @@ class InferenceWorker(threading.Thread):
         socket.send(b"READY")  # tell broker we're ready
         poller = zmq.Poller()
         poller.register(socket, zmq.POLLIN)
+        self.init_time = time.time()
         while not self.stop_flag.is_set():
             evts = dict(poller.poll(default_poll_delay_ms))
             if socket in evts and evts[socket] == zmq.POLLIN:
@@ -89,9 +91,9 @@ class InferenceWorker(threading.Thread):
                 response = self.process_sample(
                     hdi, engine, self.mp_backend, self.mp_threads)
                 response = pickle.dumps(response)
-                self.packet_counter.increment()
-                self.time_counter.increment(time.time() - proc_start_time)
                 socket.send_multipart([address, b"", response])
+                self.time_counter.increment(time.time() - proc_start_time)
+                self.packet_counter.increment()
         socket.close()
 
     def get_processed_count(self):
@@ -104,6 +106,11 @@ class InferenceWorker(threading.Thread):
         if not tot_packet_count:
             return float("nan")
         return tot_delay / self.packet_counter.count
+
+    def get_processing_uptime(self):
+        """Returns the fraction of total uptime that the server spends processing requests."""
+        tot_process_time, tot_time = self.time_counter.count, time.time() - self.init_time
+        return tot_process_time / tot_time
 
     def stop(self):
         """Stops the infinite data reception loop, allowing a clean shutdown."""
@@ -212,7 +219,8 @@ class InferenceBroker(threading.Thread):
                 for worker_id, worker in worker_map.items():
                     packets = worker.get_processed_count()
                     delay = worker.get_averge_processing_delay()
-                    print(f"  {worker_id}:  packets={packets}  avg_delay={delay:.6f}sec")
+                    uptime = worker.get_processing_uptime()
+                    print(f"  {worker_id}:  packets={packets}  avg_delay={delay:.6f}sec  proc_time_ratio={uptime:.1%}")
                 last_update_timestamp = time.time()
         for w in worker_map.values():
             w.stop()
