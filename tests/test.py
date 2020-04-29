@@ -138,7 +138,7 @@ class Tests(unittest.TestCase):
         import loader
         import server_utils
 
-        manager = server_utils.InferenceServerManager(
+        manager = server_utils.InferenceBroker(
             model_exp_path=self.EXPERIMENT_PATH,
             workers=2,
             port=6688,

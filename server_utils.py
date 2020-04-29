@@ -45,8 +45,8 @@ class AtomicCounter(object):
 class InferenceWorker(threading.Thread):
     """Spawns a single inference worker instance.
 
-    These workers are managed by the InferenceServerManager class. They
-    communicate with the server manager using a backend connection.
+    These workers are managed by the InferenceBroker class. They
+    communicate with the broker using a backend connection.
     """
 
     def __init__(
@@ -144,7 +144,7 @@ class InferenceWorker(threading.Thread):
         return response
 
 
-class InferenceServerManager(threading.Thread):
+class InferenceBroker(threading.Thread):
     """Manages inference workers through a backend connection for load balancing."""
 
     def __init__(

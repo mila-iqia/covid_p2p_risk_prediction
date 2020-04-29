@@ -56,10 +56,10 @@ def validate_args(port, exp_path, workers, verbose, mp_backend, mp_threads):
     return port, exp_path, workers, verbose, mp_backend, mp_threads
 
 
-def interrupt_handler(signal, frame, manager):
-    print("Received SIGINT; shutting down inference engine(s) gracefully...")
-    manager.stop()
-    manager.join()
+def interrupt_handler(signal, frame, broker):
+    print("Received SIGINT; shutting down inference worker(s) gracefully...")
+    broker.stop()
+    broker.join()
     print("All done.")
     sys.exit(0)
 
@@ -67,7 +67,7 @@ def interrupt_handler(signal, frame, manager):
 def main(args=None):
     port, exp_path, workers, verbose, mp_backend, mp_threads = \
         validate_args(*parse_args(args))
-    manager = server_utils.InferenceServerManager(
+    broker = server_utils.InferenceBroker(
         model_exp_path=exp_path,
         workers=workers,
         mp_backend=mp_backend,
@@ -75,8 +75,8 @@ def main(args=None):
         port=port,
         verbose=verbose,
     )
-    manager.start()
-    handler = functools.partial(interrupt_handler, manager=manager)
+    broker.start()
+    handler = functools.partial(interrupt_handler, broker=broker)
     signal.signal(signal.SIGINT, handler)
     while True:
         time.sleep(60)
