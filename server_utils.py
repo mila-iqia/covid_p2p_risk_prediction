@@ -117,38 +117,25 @@ class InferenceWorker(threading.Thread):
         self.stop_flag.set()
 
     @staticmethod
-    def process_sample(hdi, engine, mp_backend=None, mp_threads=0):
-        if isinstance(hdi, list):
-            batch_proc_human = all([
-                'risk_model' in h and h['risk_model'] == "first order probabilistic tracing"
-                for h in hdi
-            ])
-            if batch_proc_human and mp_threads > 0:
+    def process_sample(sample, engine, mp_backend=None, mp_threads=0):
+        if isinstance(sample, list):
+            if mp_threads > 0:
                 import joblib
                 with joblib.Parallel(
                         n_jobs=mp_threads,
                         backend=mp_backend,
                         batch_size="auto",
                         prefer="threads") as parallel:
-                    results = parallel((joblib.delayed(proc_human)(h) for h in hdi))
-                return [(r[1]['name'], r[1]['risk'], r[1]['clusters']) for r in results]
+                    results = parallel((joblib.delayed(proc_human)(human) for human in sample))
+                return [(r['name'], r['risk'], r['clusters']) for r in results]
             else:
-                return [InferenceWorker.process_sample(h, engine, mp_backend, mp_threads) for h in hdi]
-        assert isinstance(hdi, dict), "unexpected input data format"
-        output, human = None, None
-        try:
-            if 'risk_model' not in hdi or hdi['risk_model'] == "first order probabilistic tracing":
-                output, human = proc_human(hdi)
-            elif hdi['risk_model'] == "transformer":
-                output, human = proc_human(hdi)
-                output = engine.infer(output)  # TODO: figure out what to return from output @@@
-        except InvalidSetSize:
-            pass  # return None for invalid samples
-        if human is not None:
-            response = (human['name'], human['risk'], human['clusters'])
+                return [InferenceWorker.process_sample(human, engine, mp_backend, mp_threads) for human in sample]
         else:
-            response = None
-        return response
+            assert isinstance(sample, dict), "unexpected input data format"
+            results = proc_human(sample)
+            if results is not None:
+                return (results['name'], results['risk'], results['clusters'])
+            return None
 
 
 class InferenceBroker(threading.Thread):
@@ -322,4 +309,17 @@ def proc_human(params):
         with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
             pickle.dump(daily_output, fd)
 
-    return daily_output, human
+    inference_result = None
+    if params['risk_model'] == "transformer":
+        try:
+            inference_result = engine.infer(daily_output)
+        except InvalidSetSize:
+            pass  # return None for invalid samples
+    if inference_result is not None:
+        # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        # ... TODO: apply the inference results to the human's risk before returning it
+        #           (it will depend on the output format used by Nasim)
+        # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        pass
+
+    return human
