@@ -174,7 +174,7 @@ class Tests(unittest.TestCase):
                 dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
             )
 
-        sample = dataset.get(890, 5)
+        sample = dataset.get(890, 3)
         validate(sample)
 
 

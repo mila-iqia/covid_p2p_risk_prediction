@@ -233,8 +233,8 @@ class ContactDataset(Dataset):
         """
         if human_day_info is None:
             human_day_info = self.read(human_idx, day_idx)
-        else:
-            day_idx = human_day_info["current_day"]
+        assert day_idx + self._day_idx_offset == human_day_info["current_day"]
+        day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
         # -------- Encounters --------
@@ -245,37 +245,23 @@ class ContactDataset(Dataset):
         #  Filter encounter_info
         if encounter_info.size == 0:
             raise InvalidSetSize
-        valid_encounter_mask = encounter_info[:, 2] > (day_idx - 14)
+        valid_encounter_mask = encounter_info[:, 3] > (day_idx - 14)
         encounter_info = encounter_info[valid_encounter_mask]
         # Check again
         if encounter_info.size == 0:
             raise InvalidSetSize
-        if encounter_info.shape[1] == 3:
-            encounter_partner_id, encounter_message, encounter_day = (
-                encounter_info[:, 0],
-                encounter_info[:, 1],
-                encounter_info[:, 2],
-            )
-            # encounter_duration is not available in this version, so we use
-            # a default constant of 10 minutes. The network shouldn't care.
-            encounter_duration = (
-                np.zeros(shape=(encounter_info.shape[0], 1))
-                + self.DEFAULT_ENCOUNTER_DURATION
-            )
-        elif encounter_info.shape[1] == 4:
-            (
-                encounter_partner_id,
-                encounter_message,
-                encounter_duration,
-                encounter_day,
-            ) = (
-                encounter_info[:, 0],
-                encounter_info[:, 1],
-                encounter_info[:, 2],
-                encounter_info[:, 3],
-            )
-        else:
-            raise ValueError
+        assert encounter_info.shape[1] == 4
+        (
+            encounter_partner_id,
+            encounter_message,
+            encounter_duration,
+            encounter_day,
+        ) = (
+            encounter_info[:, 0],
+            encounter_info[:, 1],
+            encounter_info[:, 2],
+            encounter_info[:, 3],
+        )
         num_encounters = encounter_info.shape[0]
         # Convert partner-id's to binary (shape = (M, num_id_bits))
         encounter_partner_id = (
