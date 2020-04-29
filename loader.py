@@ -391,12 +391,22 @@ class ContactDataset(Dataset):
 
     def __getitem__(self, item):
         human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
+        _requested_human_idx, _requested_day_idx = human_idx, day_idx
+        num_fetch_attempts = 0
         while True:
             try:
                 return self.get(human_idx, day_idx)
             except InvalidSetSize:
+                # We tried 5 fetch attempts for this human, but none of them worked
+                # meaning this human is borked. So we try another one.
+                if num_fetch_attempts > 5:
+                    human_idx = (human_idx + 1) % self.num_humans
+                    # Reset counters and day
+                    day_idx = _requested_day_idx
+                    num_fetch_attempts = 0
                 # Try another day
                 day_idx = (day_idx + 1) % self.num_days
+                num_fetch_attempts += 1
 
     @classmethod
     def collate_fn(cls, batch):
