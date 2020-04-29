@@ -82,9 +82,23 @@ class DurationEmbedding(HealthHistoryEmbedding):
 
 
 class EntityMasker(nn.Module):
+    EPS = 1e-7
+
+    def __init__(self, mode="multiplicative"):
+        super(EntityMasker, self).__init__()
+        assert mode in ["multiplicative", "logsum"]
+        self.mode = mode
+
     def forward(self, entities, mask):
         assert mask.shape[0:2] == entities.shape[0:2]
-        return entities * mask[:, :, None]
+        if self.mode == "multiplicative":
+            return entities * mask[:, :, None]
+        elif self.mode == "logsum":
+            with torch.no_grad():
+                log_mask = torch.log(mask.clamp_min(0.) + self.EPS)
+            return entities + log_mask[:, :, None]
+        else:
+            raise NotImplementedError
 
 
 class TimeEmbedding(nn.Embedding):
