@@ -3,7 +3,9 @@ import unittest
 
 class Tests(unittest.TestCase):
 
-    DATASET_PATH = ZIP_PATH = "../data/4-29-1k/sim_v2_people-1000_days-60_init-0.01_seed-5_20200429-075921-output.zip"
+    DATASET_PATH = (
+        ZIP_PATH
+    ) = "../data/4-29-1k-final/sim_v2_people-1000_days-60_init-0.01_seed-0_20200429-143659-output.zip"
     NUM_KEYS_IN_BATCH = 15
 
     def test_model_runs(self):
