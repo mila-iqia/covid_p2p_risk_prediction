@@ -1,9 +1,6 @@
 import datetime
-import numpy as np
-import operator
 from collections import defaultdict
-from scipy.stats import wasserstein_distance as dist
-from frozen.utils import Message, decode_message, encode_message, decode_update_message, hash_to_cluster, compare_uids
+from frozen.utils import Message, decode_message, encode_message, decode_update_message, hash_to_cluster, compare_uids, hash_to_cluster_day
 
 
 class Clusters:
@@ -16,6 +13,7 @@ class Clusters:
         self.all_messages = {}
         self.clusters = defaultdict(list)
         self.clusters_by_day = defaultdict(dict)
+        self.hashes_by_day = []
 
     def add_to_clusters_by_day(self, cluster, day, m_i_enc):
         if self.clusters_by_day[day].get(cluster):
@@ -28,55 +26,29 @@ class Clusters:
         for message in messages:
             m_dec = decode_message(message)
             # otherwise score against previous messages
-            best_cluster, best_message, best_score = self.score_matches(m_dec, current_day, rng=rng)
-            if best_score >= 0:
-                cluster_id = best_cluster
-            else:
-                cluster_id = hash_to_cluster(m_dec)
-            self.all_messages[message] = cluster_id
-            self.clusters[cluster_id].append(message)
-            self.add_to_clusters_by_day(cluster_id, m_dec.day, message)
+            best_cluster, _, best_score = self.score_matches(m_dec, current_day, rng=rng)
+            self.all_messages[message] = best_cluster
+            self.clusters[best_cluster].append(message)
+            self.add_to_clusters_by_day(best_cluster, m_dec.day, message)
 
     def score_matches(self, m_new, current_day, rng=None):
         """ This function checks a new risk message against all previous messages, and assigns to the closest one in a brute force manner"""
-        best_cluster = hash_to_cluster(m_new)
-        best_message = None
-        best_score = -1
-        for i in reversed(range(current_day - 3, current_day + 1)):
-            for cluster_id, messages in self.clusters_by_day[i].items():
-                for m_enc in messages:
-                    obs_uid, risk, day, unobs_uid, has_app = decode_message(m_enc)
-                    if m_new.uid == obs_uid and m_new.day == day:
-                        best_cluster = cluster_id
-                        best_message = m_enc
-                        best_score = 3
-                        break
-                    elif compare_uids(m_new.uid, obs_uid, 1) and m_new.day - 1 == day and m_new.risk == risk:
-                        best_cluster = cluster_id
-                        best_message = m_enc
-                        best_score = 2
-                    elif compare_uids(m_new.uid, obs_uid, 2) and m_new.day - 2 == day and best_score < 1:
-                        best_cluster = cluster_id
-                        best_message = m_enc
-                        best_score = 1
-                    elif compare_uids(m_new.uid, obs_uid, 3) and m_new.day - 3 == day and best_score < 0:
-                        best_cluster = cluster_id
-                        best_message = m_enc
-                        best_score = 0
-                    else:
-                        best_cluster = cluster_id
-                        best_message = m_enc
-                        best_score = -1
-                if best_score == 3:
+        best_score = 4
+        cluster_days = hash_to_cluster_day(m_new)
+        best_cluster = 256
+        for day, cluster_ids in cluster_days.items():
+            for cluster_id in cluster_ids:
+                if any(self.clusters_by_day[current_day]):
+                    best_cluster = cluster_id
                     break
-            if best_score == 3:
+            best_score -= 1
+            if best_cluster != 256:
                 break
+
         # print(f"best_cluster: {best_cluster}, m_new: {m_new}, best_score: {best_score}")
         # print(self.clusters)
 
-        if best_message:
-            best_message = decode_message(best_message)
-        return best_cluster, best_message, best_score
+        return best_cluster, None, best_score
 
     def score_matches_in_cluster(self, update_message, cluster_messages):
         """ This function takes in a set of messages and returns the best scoring one"""
