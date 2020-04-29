@@ -73,7 +73,6 @@ def candidate_exposures(human, date):
                         break
                 if any(messages):
                     idx += 1
-
     return candidate_encounters, exposed_encounters
 
 
