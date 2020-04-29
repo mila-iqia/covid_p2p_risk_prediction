@@ -264,21 +264,12 @@ def proc_human(params):
     assert isinstance(params, dict) and \
         all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
-
     human = params["human"]
     human["clusters"].add_messages(human["messages"], params["current_day"], human["rng"])
     human["messages"] = []
-    human["clusters"].update_records(human["update_messages"], human)
+    human["clusters"].update_records(human["update_messages"])
     human["update_messages"] = []
     human["clusters"].purge(params["current_day"])
-
-    todays_date = params['start'] + datetime.timedelta(params['current_day'])
-
-    human['risk'] = RiskModelTristan.update_risk_daily(human, todays_date)
-
-    # update risk based on that day's messages
-    if human['messages']:
-        human['risk'] = RiskModelTristan.update_risk_encounters(human)
 
     todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
     is_exposed, exposure_day = frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
