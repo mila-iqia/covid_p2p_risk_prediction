@@ -88,7 +88,7 @@ class Clusters:
 
     def score_two_messages(self, update_message, risk_message):
         """ This function takes in two messages and scores how well they match"""
-        obs_uid, risk, day, unobs_uid = decode_message(risk_message)
+        obs_uid, risk, day, unobs_uid, has_app = decode_message(risk_message)
         if update_message.uid == obs_uid and update_message.day == day and update_message.risk == risk:
             score = 3
         elif compare_uids(update_message.uid, obs_uid,
@@ -136,15 +136,26 @@ class Clusters:
         # if we're using naive tracing, we actually don't care which records we update
         if not update_messages:
             return self
+
         grouped_update_messages = self.group_by_received_at(update_messages)
         for received_at, update_messages in grouped_update_messages.items():
 
             for update_message in update_messages:
-                best_cluster = hash_to_cluster(update_message)
-                best_message = self.clusters_by_day[update_message.day][best_cluster][0]
-                best_message = decode_message(best_message)
-                updated_message = Message(best_message.uid, update_message.new_risk, best_message.day, best_message.unobs_id)
-                self.update_record(best_cluster, best_cluster, best_message, updated_message)
+                old_message_dec = Message(update_message.uid, update_message.risk, update_message.day, update_message.unobs_id, update_message.has_app)
+                old_message_enc = encode_message(old_message_dec)
+                old_cluster = None
+                for cluster, messages in self.clusters_by_day[update_message.day].items():
+                    for message in messages:
+                        if message == old_message_enc:
+                            old_cluster = cluster
+                            print(old_cluster)
+                            break
+                    if old_cluster:
+                        break
+                updated_message = Message(old_message_dec.uid, update_message.new_risk, old_message_dec.day, old_message_dec.unobs_id, old_message_dec.has_app)
+                new_cluster = hash_to_cluster(updated_message)
+
+                self.update_record(old_cluster, new_cluster, old_message_dec, updated_message)
         return self
 
     def purge(self, current_day):
