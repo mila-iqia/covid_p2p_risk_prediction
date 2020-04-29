@@ -19,16 +19,16 @@ import torch.nn.functional as F
 # likely we rank the correct encounter at the first place.
 #
 # Task 3: Status Prediction
-# The third task is status prediction. For each date, the goal is to indentify the users
+# The third task is status prediction. For each date, the goal is to identify the users
 # who have been infected.
-# We mainly use precision, recall and F1 for evaluation. Basically, for each date, we
-# first use the ML model to predict a label for each user (exposed/infected or susceptible
-# /recovered). Then we compare the list of exposed/infected users with the ground-truth
-# list, and compute precision, recall and F1.
-# Note that besides standard precision, we also compute precision within people who have
-# no test results (precision in untested users), and precision within people who have no
-# test results and no symptoms (precision in untested and asymptomatic users).
-
+# We mainly use precision@k, recall@k for evaluation. Basically, for each date:
+# (1) we first use ML model to predict the probability each user has been infected;
+# (2) then we sort all the users based on the infection probability;
+# (3) finally we compute precision and recall at top k percentage.
+# In this process, we evaluate on three different sets of users:
+# (1) all users;
+# (2) users who have not been tested;
+# (3) users who have not been tested and have not reported any symptoms.
 
 class Metrics(nn.Module):
     def __init__(self):
@@ -67,36 +67,49 @@ class Metrics(nn.Module):
         prediction = model_output.encounter_variables.squeeze(2).masked_fill(
             (1 - model_input.mask).bool(), -float("inf")
         )
+        logit_sink = torch.zeros(
+            (prediction.size(0), 1), dtype=prediction.dtype, device=prediction.device,
+        )
+        prediction = torch.cat([prediction, logit_sink], dim=1)
         # Extract prediction from model_input
         target = model_input.encounter_is_contagion.squeeze(2)
         for k in range(target.size(0)):
             # Find position of target encounter
             label = (target[k] == 1).nonzero()
             if label.squeeze().size() != torch.Size([]):
-                ranking = (prediction[k] >= 0).sum() + 1
+                label = -1
             else:
-                ranking = (prediction[k] >= prediction[k][label.item()]).sum() + 1
+                label = label.item()
+            ranking = (prediction[k] >= prediction[k, label]).sum()
             self.total_encounter_mrr += 1.0 / ranking.item()
             if ranking.item() == 1:
                 self.total_encounter_hit1 += 1.0
             self.total_encounter_count += 1
 
         # Task 3: Status Prediction
+        prediction = model_output.encounter_variables.squeeze(2).masked_fill(
+            (1 - model_input.mask).bool(), -float("inf")
+        )
+        logit_sink = torch.zeros(
+            (prediction.size(0), 1), dtype=prediction.dtype, device=prediction.device,
+        )
+        prediction = torch.cat([prediction, logit_sink], dim=1)
+        prediction = torch.softmax(prediction, dim=-1)
         for k in range(model_input.human_idx.size(0)):
             human_idx = model_input.human_idx[k].item()
             day_idx = model_input.day_idx[k].item()
-            prediction = model_output.latent_variable[k, 0, 0].item()
+            probability = 1 - prediction[k, -1].item()
             if (
                 model_input.current_compartment[k][1] == 1
                 or model_input.current_compartment[k][2] == 1
             ):
-                target = 1
+                infected = 1
             else:
-                target = 0
+                infected = 0
             if model_input.health_history[k, :, 0:-1].sum() != 0:
-                symptom = 1
+                symptomatic = 1
             else:
-                symptom = 0
+                symptomatic = 0
             if model_input.health_history[k, :, -1].sum() != 0:
                 tested = 1
             else:
@@ -104,91 +117,97 @@ class Metrics(nn.Module):
             if day_idx not in self.status_prediction:
                 self.status_prediction[day_idx] = list()
             self.status_prediction[day_idx].append(
-                (human_idx, prediction, target, symptom, tested)
+                (human_idx, probability, infected, symptomatic, tested)
             )
 
-    def evaluate(self, threshold=0.1):
-        precision, recall, f1 = 0.0, 0.0, 0.0
-        precision_untested = 0.0
-        precision_untested_asymptomatic = 0.0
+    def compute_pr(self, rank_list, percentage):
+        top_n = int(percentage * len(rank_list))
+        a, b, current_precision = 0.0, 0.0, 0.0
+        for i in range(top_n):
+            infected, symptomatic, tested = rank_list[i][2:]
+            if infected == 1:
+                a += 1
+            b += 1
+        if b != 0:
+            current_precision = a / b
+
+        top_n = int(percentage * len(rank_list))
+        a, b, current_recall = 0.0, 0.0, 0.0
+        for i in range(len(rank_list)):
+            infected, symptomatic, tested = rank_list[i][2:]
+            if infected == 1:
+                if i < top_n:
+                    a += 1
+                b += 1
+        if b != 0:
+            current_recall = a / b
+
+        return current_precision, current_recall
+
+    def evaluate(self, percentage_list=[0.01]):
+        precision_all = [0.0 for _ in percentage_list]
+        precision_nottested = [0.0 for _ in percentage_list]
+        precision_nottested_notsymptomatic = [0.0 for _ in percentage_list]
+
+        recall_all = [0.0 for _ in percentage_list]
+        recall_nottested = [0.0 for _ in percentage_list]
+        recall_nottested_notsymptomatic = [0.0 for _ in percentage_list]
 
         for day_idx, status in self.status_prediction.items():
-            # update precision
-            a, b, current_precision = 0.0, 0.0, 0.0
-            for human_idx, prediction, target, symptom, tested in status:
-                if prediction > threshold:
-                    b += 1
-                    if target == 1:
-                        a += 1
-            if b != 0:
-                current_precision += a / b
+            sorted_list = sorted(status, key=lambda x:x[1], reverse=True)
 
-            # update precision for untested people
-            a, b, current_precision_untested = 0.0, 0.0, 0.0
-            for human_idx, prediction, target, symptom, tested in status:
-                if prediction > threshold and tested == 0:
-                    b += 1
-                    if target == 1:
-                        a += 1
-            if b != 0:
-                current_precision_untested += a / b
+            # update precision and recall
+            for k, percentage in enumerate(percentage_list):
+                # precision and recall for all users
+                rank_list = [item for item in sorted_list]
+                precision, recall = self.compute_pr(rank_list, percentage)
+                precision_all[k] += precision
+                recall_all[k] += recall
 
-            # update precision for untested and asymptomatic people
-            a, b, current_precision_untested_asymptomatic = 0.0, 0.0, 0.0
-            for human_idx, prediction, target, symptom, tested in status:
-                if prediction > threshold and tested == 0 and symptom == 0:
-                    b += 1
-                    if target == 1:
-                        a += 1
-            if b != 0:
-                current_precision_untested_asymptomatic += a / b
+                # precision and recall for not tested users
+                rank_list = [item for item in sorted_list if item[3] == 0]
+                precision, recall = self.compute_pr(rank_list, percentage)
+                precision_nottested[k] += precision
+                recall_nottested[k] += recall
 
-            # update recall
-            a, b, current_recall = 0.0, 0.0, 0.0
-            for human_idx, prediction, target, symptom, tested in status:
-                if target == 1:
-                    b += 1
-                    if prediction > threshold:
-                        a += 1
-            if b != 0:
-                current_recall += a / b
+                # precision and recall for not tested and not symtomatic users
+                rank_list = [item for item in sorted_list if (item[3] == 0 and item[4] == 0)]
+                precision, recall = self.compute_pr(rank_list, percentage)
+                precision_nottested_notsymptomatic[k] += precision
+                recall_nottested_notsymptomatic[k] += recall
 
-            # update f1
-            precision += current_precision
-            precision_untested += current_precision_untested
-            precision_untested_asymptomatic += current_precision_untested_asymptomatic
-            recall += current_recall
-            f1 += (
-                2
-                * current_precision
-                * current_recall
-                / (current_precision + current_recall + 1e-10)
-            )
+        for k in range(len(precision_all)):
+            precision_all[k] /= len(self.status_prediction)
+        for k in range(len(precision_nottested)):
+            precision_nottested[k] /= len(self.status_prediction)
+        for k in range(len(precision_nottested_notsymptomatic)):
+            precision_nottested_notsymptomatic[k] /= len(self.status_prediction)
+        
+        for k in range(len(recall_all)):
+            recall_all[k] /= len(self.status_prediction)
+        for k in range(len(recall_nottested)):
+            recall_nottested[k] /= len(self.status_prediction)
+        for k in range(len(recall_nottested_notsymptomatic)):
+            recall_nottested_notsymptomatic[k] /= len(self.status_prediction)
 
-        precision /= len(self.status_prediction)
-        precision_untested /= len(self.status_prediction)
-        precision_untested_asymptomatic /= len(self.status_prediction)
-        recall /= len(self.status_prediction)
-        f1 /= len(self.status_prediction)
-
-        return dict(
-            [
-                (
-                    "mse",
-                    math.sqrt(
-                        self.total_infectiousness_loss
-                        / (self.total_infectiousness_count + 0.001)
-                    ),
-                ),
-                ("mrr", self.total_encounter_mrr / self.total_encounter_count),
-                ("hit@1", self.total_encounter_hit1 / self.total_encounter_count),
-                ("precision", precision),
-                ("precision in untested users", precision_untested),
-                (
-                    "precision in untested and asymptomatic users",
-                    precision_untested_asymptomatic,
-                ),
-                ("recall", recall),
-                ("f1", f1),
-            ]
+        result = dict()
+        result["mse"] = math.sqrt(
+            self.total_infectiousness_loss
+            / (self.total_infectiousness_count + 0.001)
         )
+        result["mrr"] = self.total_encounter_mrr / self.total_encounter_count
+        result["hit@1"] = self.total_encounter_hit1 / self.total_encounter_count
+        for percentage, precision in zip(percentage_list, precision_all):
+            result["precision top_{} all_users".format(percentage)] = precision
+        for percentage, precision in zip(percentage_list, precision_nottested):
+            result["precision top_{} users_not_tested".format(percentage)] = precision
+        for percentage, precision in zip(percentage_list, precision_nottested_notsymptomatic):
+            result["precision top_{} users_not_tested_and_no_symptoms".format(percentage)] = precision
+        for percentage, recall in zip(percentage_list, recall_all):
+            result["recall top_{} all_users".format(percentage)] = recall
+        for percentage, recall in zip(percentage_list, recall_nottested):
+            result["recall top_{} users_not_tested".format(percentage)] = recall
+        for percentage, recall in zip(percentage_list, recall_nottested_notsymptomatic):
+            result["recall top_{} users_not_tested_and_no_symptoms".format(percentage)] = recall
+
+        return result
