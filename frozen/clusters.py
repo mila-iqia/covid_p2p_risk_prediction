@@ -133,29 +133,32 @@ class Clusters:
         return self
 
     def purge(self, current_day):
-        for cluster_id, messages in self.clusters_by_day[current_day - 14].items():
-            for message in messages:
-                del self.clusters[cluster_id][self.clusters[cluster_id].index(message)]
-                try:
-                    del self.all_messages[message]
-                except Exception:
-                    pass
-        to_purge = []
-        for cluster_id, messages in self.clusters.items():
-            if len(self.clusters[cluster_id]) == 0:
-                to_purge.append(cluster_id)
-        for cluster_id in to_purge:
-            del self.clusters[cluster_id]
-        if current_day - 14 >= 0:
-            del self.clusters_by_day[current_day - 14]
-        to_purge = defaultdict(list)
-        for day, clusters in self.clusters_by_day.items():
-            for cluster_id, messages in clusters.items():
-                if not messages:
-                    to_purge[day].append(cluster_id)
-        for day, cluster_ids in to_purge.items():
-            for cluster_id in cluster_ids:
-                del self.clusters_by_day[day][cluster_id]
+        try:
+            for cluster_id, messages in self.clusters_by_day[current_day - 14].items():
+                for message in messages:
+                    try:
+                        del self.clusters[cluster_id][self.clusters[cluster_id].index(message)]
+                        del self.all_messages[message]
+                    except Exception:
+                        pass
+            to_purge = []
+            for cluster_id, messages in self.clusters.items():
+                if len(self.clusters[cluster_id]) == 0:
+                    to_purge.append(cluster_id)
+            for cluster_id in to_purge:
+                del self.clusters[cluster_id]
+            if current_day - 14 >= 0:
+                del self.clusters_by_day[current_day - 14]
+            to_purge = defaultdict(list)
+            for day, clusters in self.clusters_by_day.items():
+                for cluster_id, messages in clusters.items():
+                    if not messages:
+                        to_purge[day].append(cluster_id)
+            for day, cluster_ids in to_purge.items():
+                for cluster_id in cluster_ids:
+                    del self.clusters_by_day[day][cluster_id]
+        except Exception:
+            pass
         self.update_messages = []
 
     def __len__(self):
