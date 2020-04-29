@@ -45,6 +45,7 @@ def get_test_result_array(human_test_time, date):
     results = np.zeros(14)
     result_day = (date - human_test_time).days
     if result_day >= 0 and result_day < 14:
+        # TODO: add if human test results "negative" -1
         results[result_day] = 1
     return results
 

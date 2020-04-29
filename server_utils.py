@@ -3,7 +3,7 @@
 import datetime
 import numpy as np
 import os
-import pickle
+import dill as pickle
 import threading
 import time
 import typing
@@ -11,7 +11,6 @@ import zmq
 
 from infer import InferenceEngine
 from loader import InvalidSetSize
-from risk_models import RiskModelTristan
 
 expected_raw_packet_param_names = [
     "start", "current_day", "all_possible_symptoms", "human",
