@@ -37,15 +37,7 @@ unzip <data-file-name>.zip data
 
 ### Dependencies
 
-TODO @Nasim if you have made an env for this, please replace/update this section.
-To use the provided code data loaders, main loop, and model, you will need:
-* `pytorch` TODO VERSION
-* the usual ML stack (`numpy`...TODO)
-* `speedrun` which you can install via: 
-```
- pip install git+https://github.com/inferno-pytorch/speedrun.git@dev`. 
-```
-* For logging with wandb, you'll also need to `pip install wandb`. 
+To install the dependencies, simply `pip install -r requirements.txt` and you're all set. 
 
 ### Train the transformer model
 
@@ -55,7 +47,11 @@ Run the training script, logging to `exp/`:
 ```
 python train.py exp/MY-CTT-EXPERIMENT-0 --inherit base_config/CTT-0
 ```
-This will start training on a GPU, if available. If you want to use a CPU instead, append  `--config.device cpu` to the above command. 
+where `MY-CTT-EXPERIMENT-0` is the _experiment directory_ and you may call it anything that makes sense to you. 
+
+The above command will start training a transformer model on a GPU if available, and dump the tensorboard logs in `exp/MY-CTT-EXPERIMENT-0/Logs`. If you have set up [Weights and Biases](https://www.wandb.com/), simply append `--config.wandb.use True` to the command. If you do not want to use GPU even if you have one available, append `--config.device cpu`. 
+
+To get a sense of the hyperparameters you can tune, take a look inside `base_configs/CTT-0/Configurations/train_config.yml`. 
 
 ### Train your own model
 
