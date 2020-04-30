@@ -16,31 +16,31 @@ This repo contains pytorch dataloaders and a Transformer model; you can start fr
 3. Extract the data to a folder called data inside the repo : `unzip covi-1k-04-27.zip data`
 4. Install dependencies (see below) and `mkdir exp`
 5. Run the transformer on CPU to make sure everything is working `python train.py exp/MY-CTT-EXPERIMENT-0 --inherit base_config/CTT-0 --config.device cpu` 
-6. Replace the transformer model with your own and start experimenting! Also welcome to change/improve the transformer model
-7. Upload your results to the results table below by making a PR to this repo
+6. Replace the transformer model with your own and start experimenting! You are also welcome to change/improve the transformer model.
+7. Upload your public test-set results to the results table below by making a PR to this repo
 
 ## More information
 
 ### Dataset details
 
-Dataset ID |  Clustering Type | Target Risk Predictor | Simulator Version | Risk Prediction Version | Mobility Level | App Adoption | Population | Duration (days) | Seeds | Train/Val | Public Test 
---- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
-V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | Low | 50% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5.zip) | Coming Soon
-V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | Low | 100% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1.zip) | Coming Soon
-V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | High | 50% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5_feelgood.zip) | [Public Test](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5_feelgood-public-test.zip)
-V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | High | 100% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1_feelgood.zip) | [Public Test](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1_feelgood-public-test.zip)
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
-V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+Dataset ID |  Train/Val | Public Test | Train Seeds | Val Seeds | Test Seeds | Clustering Type | Target Risk Predictor | Simulator Version | Risk Prediction Version | Mobility Level | App Adoption | Population | Duration (days) 
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+V1-1K | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5.zip) | [Public Test]() | 0-6 | 7-9 | 10-12  | Heuristic  | Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | Low | 50% | 1,000 | 60 
+V1-1K | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1.zip) | [Public Test]() | 0-6 | 7-9 | 10-12 | Heuristic  | Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | Low | 100% | 1,000 | 60 
+V1-1K | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5_feelgood.zip) | [Public Test](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5_feelgood-public-test.zip) | 0-6 | 7-9 | 10-12 |  Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | High | 50% | 1,000 | 60 
+V1-1K | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1_feelgood.zip) | [Public Test](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1_feelgood-public-test.zip) | 0-6 | 7-9 | 10-12 |  Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | High | 100% | 1,000 | 60  
+V1-50K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | Low | 50% | 50,000 | 60 
+V1-50K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | Low | 100% | 50,000 | 60 
+V1-50K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | High | 50% | 50,000 | 60
+V1-50K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | High | 100% | 50,000 | 60 
+V2-1K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | Low | 50% | 1,000 | 60 
+V2-1K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | Low | 100% | 1,000 | 60 
+V2-1K | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | High | 50% | 1,000 | 60
+V2-1k | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | High | 100% | 1,000 | 60 
+V2-50k | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | Low | 50% | 50,000 | 60 
+V2-50k | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | Low | 100% | 50,000 | 60 
+V2-50k | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | High | 50% | 50,000 | 60
+V2-50k | TBD  | TBD | 0-6  | 7-9 | 10-12 | Heuristic |Naive First-Order Contact Tracing | TBD | TBD | High | 100% | 50,000 | 60 
 
 Extract the provided zip file into `\data`.
 ```
