@@ -23,12 +23,24 @@ This repo contains pytorch dataloaders and a Transformer model; you can start fr
 
 ### Dataset details
 
-Dataset ID |  Clustering Type | Target Risk Predictor | Simulator Version | Risk Prediction Version | Population | Duration (days) | Seeds | Link | MD5 hash
---- | --- | --- | --- | --- | --- | --- | --- | --- | ---
-V1-1K | Heuristic  |Naive First-Order Contact Tracing | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 1,000 | 60 | 10 | [download](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/covi-1k-04-27.zip) | 0886c2001edee33dd0f59fd58062909f
-V1-50K | Heuristic |Naive First-Order Contact Tracing | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 50,000 | 60 | 5 | Coming by April 28th | TBD
-V2-1K | Heuristic | Transformer |  TBD |TBD | 1,000 | 60 | 10 | Coming by April 30th | TBD
-V2-50K | Heuristic | Transformer |  TBD |TBD | 50,000 | 60 | 10 | Coming by April 30th | TBD
+Dataset ID |  Clustering Type | Target Risk Predictor | Simulator Version | Risk Prediction Version | Mobility Level | App Adoption | Population | Duration (days) | Seeds | Train/Val | Public Test 
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | Low | 50% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5.zip) | Coming Soon
+V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | Low | 100% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1.zip) | Coming Soon
+V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | High | 50% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5_feelgood.zip) | Coming Soon
+V1-1K | Heuristic  |Naive First-Order Contact Tracing | [e302ecfa1fe](https://github.com/pg2455/covid_p2p_simulation/commit/e302ecfa1fe305ae766f61a8b8a7bfaf92c0d6b5)  | [bbb4124b](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/bbb4124bee1211fda23c0bfb0c1e1168db3fd73c) | High | 100% | 1,000 | 60 | 10 | [Train/Val](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_1_feelgood.zip) | Coming Soon
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-1K | Heuristic |Transformer | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
+V1-50K | Heuristic |Naive First-Order Contact Tracing | TBD  | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD
 
 Extract the provided zip file into `\data`.
 ```
@@ -37,15 +49,7 @@ unzip <data-file-name>.zip data
 
 ### Dependencies
 
-TODO @Nasim if you have made an env for this, please replace/update this section.
-To use the provided code data loaders, main loop, and model, you will need:
-* `pytorch` TODO VERSION
-* the usual ML stack (`numpy`...TODO)
-* `speedrun` which you can install via: 
-```
- pip install git+https://github.com/inferno-pytorch/speedrun.git@dev`. 
-```
-* For logging with wandb, you'll also need to `pip install wandb`. 
+To install the dependencies, simply `pip install -r requirements.txt` and you're all set. 
 
 ### Train the transformer model
 
@@ -55,7 +59,11 @@ Run the training script, logging to `exp/`:
 ```
 python train.py exp/MY-CTT-EXPERIMENT-0 --inherit base_config/CTT-0
 ```
-This will start training on a GPU, if available. If you want to use a CPU instead, append  `--config.device cpu` to the above command. 
+where `MY-CTT-EXPERIMENT-0` is the _experiment directory_ and you may call it anything that makes sense to you. 
+
+The above command will start training a transformer model on a GPU if available, and dump the tensorboard logs in `exp/MY-CTT-EXPERIMENT-0/Logs`. If you have set up [Weights and Biases](https://www.wandb.com/), simply append `--config.wandb.use True` to the command. If you do not want to use GPU even if you have one available, append `--config.device cpu`. 
+
+To get a sense of the hyperparameters you can tune, take a look inside `base_configs/CTT-0/Configurations/train_config.yml`. 
 
 ### Train your own model
 

@@ -3,6 +3,8 @@ from addict import Dict
 import os
 import glob
 from typing import Union
+import zipfile
+import io
 
 import numpy as np
 import torch
@@ -36,17 +38,17 @@ class ContactDataset(Dataset):
         "human_idx": ("human_idx", slice(None)),
         "day_idx": ("day_idx", slice(None)),
         "health_history": ("health_history", slice(None)),
-        "reported_symptoms": ("health_history", slice(0, 12)),
-        "test_results": ("health_history", slice(12, 13)),
-        "age": ("health_profile", slice(0, 8)),
-        "sex": ("health_profile", slice(8, 9)),
-        "preexisting_conditions": ("health_profile", slice(9, 14)),
+        "reported_symptoms": ("health_history", slice(0, 28)),
+        "test_results": ("health_history", slice(28, 29)),
+        "age": ("health_profile", slice(0, 1)),
+        "sex": ("health_profile", slice(1, 2)),
+        "preexisting_conditions": ("health_profile", slice(2, 12)),
         "history_days": ("history_days", slice(None)),
         "valid_history_mask": ("valid_history_mask", slice(None)),
         "current_compartment": ("current_compartment", slice(None)),
         "infectiousness_history": ("infectiousness_history", slice(None)),
-        "reported_symptoms_at_encounter": ("encounter_health", slice(0, 12)),
-        "test_results_at_encounter": ("encounter_health", slice(12, 13)),
+        "reported_symptoms_at_encounter": ("encounter_health", slice(0, 28)),
+        "test_results_at_encounter": ("encounter_health", slice(28, 29)),
         "encounter_message": ("encounter_message", slice(None)),
         "encounter_partner_id": ("encounter_partner_id", slice(None)),
         "encounter_duration": ("encounter_duration", slice(None)),
@@ -61,14 +63,10 @@ class ContactDataset(Dataset):
     AGE_NOT_AVAILABLE = 0
     DEFAULT_SEX = 0
     DEFAULT_ENCOUNTER_DURATION = 10
-    DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0]
+    DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     def __init__(
-        self,
-        path: str,
-        relative_days=True,
-        bit_encoded_age=True,
-        clip_history_days=True,
+        self, path: str, relative_days=True, clip_history_days=False, preload=False,
     ):
         """
         Parameters
@@ -81,38 +79,75 @@ class ContactDataset(Dataset):
             as negative values, i.e. day = -2 means the day before yesterday.
             If set to False, the time-stamps show the true number of days since
             day 0 (e.g. "today" can be represented as say 15).
-        bit_encoded_age : bool
-            Whether the age is to be encoded as a vector of bits or as a
-            float between (0, 1). Invalid ages are encoded as -1.
         clip_history_days : bool
             Whether `history_days` (in the output) clips to the equivalent of
             day 0 for days that predate records. E.g. in day 5, whether
             `history_days[10]` is -5 (True) or -10 (False).
+        preload : bool
+            If path points to a zipfile, load the entire file to RAM (as a
+            BytesIO object).
         """
         # Private
         self._num_id_bits = 16
+        self._bit_encoded_age = False
         # Public
         self.path = path
         self.relative_days = relative_days
-        self.bit_encoded_age = bit_encoded_age
         self.clip_history_days = clip_history_days
+        self.preload = preload
         # Prepwork
+        self._preloaded = None
         self._read_data()
 
     def _read_data(self):
-        assert os.path.isdir(self.path)
-        files = glob.glob(os.path.join(self.path, "*"))
-        day_idxs, human_idxs = zip(
-            *[
-                [
-                    int(component)
-                    for component in os.path.basename(file).strip(".pkl").split("-")
+        if os.path.isdir(self.path):
+            # Case 1: Extracted files
+            files = glob.glob(os.path.join(self.path, "*"))
+            day_idxs, human_idxs = zip(
+                *[
+                    [
+                        int(component)
+                        for component in os.path.basename(file).strip(".pkl").split("-")
+                    ]
+                    for file in files
                 ]
-                for file in files
-            ]
-        )
-        self._num_days = max(day_idxs) + 1
-        self._num_humans = max(human_idxs)
+            )
+        elif self.path.endswith(".zip"):
+            # Case 2: Zipfiles
+            if self.preload:
+                with open(self.path, "rb") as f:
+                    buffer = io.BytesIO(f.read())
+                buffer.seek(0)
+                self._preloaded = zipfile.ZipFile(buffer)
+                files = self._preloaded.namelist()
+            else:
+                with zipfile.ZipFile(self.path) as zf:
+                    files = zipfile.ZipFile.namelist(zf)
+
+            def extract_components(file):
+                components = file[:-4].split("-")
+                if len(components) == 3:
+                    # This can happen for a file-name like -1-100.pkl, which means
+                    # that the first idx is negative.
+                    return [-int(components[1]), int(components[2])]
+                else:
+                    return [int(c) for c in components]
+
+            day_idxs, human_idxs = zip(
+                *[
+                    extract_components(file)
+                    for file in files
+                    if (file.endswith(".pkl") and not file.startswith("__MACOSX"))
+                ]
+            )
+        else:
+            raise ValueError
+        # Set the offsets as required
+        self._day_idx_offset = min(day_idxs)
+        self._human_idx_offset = min(human_idxs)
+        # Compute numbers of days and humans
+        self._num_days = max(day_idxs) - self._day_idx_offset + 1
+        self._num_humans = max(human_idxs) - self._human_idx_offset + 1
 
     @property
     def num_humans(self):
@@ -126,9 +161,28 @@ class ContactDataset(Dataset):
         return self.num_humans * self.num_days
 
     def read(self, human_idx, day_idx):
-        file_name = os.path.join(self.path, f"{day_idx}-{human_idx + 1}.pkl")
-        with open(file_name, "rb") as f:
-            return pickle.load(f)
+        file_name = (
+            f"{day_idx + self._day_idx_offset}-"
+            f"{human_idx + self._human_idx_offset}.pkl"
+        )
+        if os.path.isdir(self.path):
+            # We're working with a dir, so we read and return
+            file_name = os.path.join(self.path, file_name)
+            with open(file_name, "rb") as f:
+                return pickle.load(f)
+        elif self.path.endswith(".zip"):
+            # We're working with a zipfile
+            # Check if we have the content preload to RAM
+            if self._preloaded is not None:
+                self._preloaded: zipfile.ZipFile
+                with self._preloaded.open(file_name, "r") as f:
+                    return pickle.load(f)
+            else:
+                # Read zip archive from path, and then read content
+                # from archive
+                with zipfile.ZipFile(self.path) as zf:
+                    with zf.open(file_name, "r") as f:
+                        return pickle.load(f)
 
     def get(self, human_idx: int, day_idx: int, human_day_info: dict = None) -> Dict:
         """
@@ -146,20 +200,15 @@ class ContactDataset(Dataset):
         -------
         Dict
             An addict with the following attributes:
-                -> `health_history`: 14-day health history of self of shape (14, 13)
-                        with channels `reported_symptoms` (12), `test_results`(1).
+                -> `health_history`: 14-day health history of self of shape (14, 29)
+                        with channels `reported_symptoms` (28), `test_results`(1).
                 -> `health_profile`: health profile of the individual, 
-                    of shape (14,) or (7,) depending on whether `bit_encoded_age` is 
-                    set to True (former) or not (latter). If `bit_encoded_age`: 
-                        We have  channels `age` (8), `sex` (1), and
-                        `preexisting_conditions` (5,). The `age` has 8 channels because
-                        we represent the corresponding integer in 8-bit binary. If the
-                        age is not available (= 0), it is represented as a size-8 vector
-                        of -1.
-                    If not: 
-                        Same as above, but `age` is now simply a float taking values in
-                        Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to age 100, 
-                        whereas {-1} corresponds to the case where age is not available.
+                    of shape (12,), containing channels `age` (1), `sex` (1), and
+                    `preexisting_conditions` (10,). Note that `age` is a float taking
+                    values in Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to
+                    age 100, whereas {-1} corresponds to the case where age is not
+                    available. Likewise, `sex` can be one of {-1, 0, 1}, where -1
+                    implies that `sex` is not known.
                 -> `human_idx`: the ID of the human individual, of shape (1,). If not
                     available, it's set to -1.
                 -> `day_idx`: the day from which the sample originates, of shape (1,).
@@ -179,12 +228,13 @@ class ContactDataset(Dataset):
                         id (say 65535) is represented in 16-bit binary.
                 -> `encounter_duration`: duration of encounter, of shape (M, 1)
                 -> `encounter_day`: the day of encounter, of shape (M, 1)
-                -> `encounter_is_contagion`: whether the encounter was a contagion.
+                -> `encounter_is_contagion`: whether the encounter was a contagion,
+                    of shape (M, 1).
         """
         if human_day_info is None:
             human_day_info = self.read(human_idx, day_idx)
-        else:
-            day_idx = human_day_info["current_day"]
+        assert day_idx + self._day_idx_offset == human_day_info["current_day"]
+        day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
         # -------- Encounters --------
@@ -195,37 +245,23 @@ class ContactDataset(Dataset):
         #  Filter encounter_info
         if encounter_info.size == 0:
             raise InvalidSetSize
-        valid_encounter_mask = encounter_info[:, 2] > (day_idx - 14)
+        valid_encounter_mask = encounter_info[:, 3] > (day_idx - 14)
         encounter_info = encounter_info[valid_encounter_mask]
         # Check again
         if encounter_info.size == 0:
             raise InvalidSetSize
-        if encounter_info.shape[1] == 3:
-            encounter_partner_id, encounter_message, encounter_day = (
-                encounter_info[:, 0],
-                encounter_info[:, 1],
-                encounter_info[:, 2],
-            )
-            # encounter_duration is not available in this version, so we use
-            # a default constant of 10 minutes. The network shouldn't care.
-            encounter_duration = (
-                np.zeros(shape=(encounter_info.shape[0], 1))
-                + self.DEFAULT_ENCOUNTER_DURATION
-            )
-        elif encounter_info.shape[1] == 4:
-            (
-                encounter_partner_id,
-                encounter_message,
-                encounter_duration,
-                encounter_day,
-            ) = (
-                encounter_info[:, 0],
-                encounter_info[:, 1],
-                encounter_info[:, 2],
-                encounter_info[:, 3],
-            )
-        else:
-            raise ValueError
+        assert encounter_info.shape[1] == 4
+        (
+            encounter_partner_id,
+            encounter_message,
+            encounter_duration,
+            encounter_day,
+        ) = (
+            encounter_info[:, 0],
+            encounter_info[:, 1],
+            encounter_info[:, 2],
+            encounter_info[:, 3],
+        )
         num_encounters = encounter_info.shape[0]
         # Convert partner-id's to binary (shape = (M, num_id_bits))
         encounter_partner_id = (
@@ -241,9 +277,9 @@ class ContactDataset(Dataset):
             .reshape(num_encounters, -1)
             .astype("float32")
         )
-        encounter_is_contagion = human_day_info["unobserved"]["exposure_encounter"][
-            valid_encounter_mask, None
-        ].astype("float32")
+        encounter_is_contagion = self._fetch_encounter_is_contagion(
+            human_day_info, valid_encounter_mask, encounter_day
+        )
         encounter_day = encounter_day.astype("float32")
         # -------- Health --------
         # Get health info
@@ -254,7 +290,7 @@ class ContactDataset(Dataset):
             ],
             axis=1,
         )
-        infectiousness_history = human_day_info["unobserved"]["infectiousness"][:, None]
+        infectiousness_history = self._fetch_infectiousness_history(human_day_info)
         history_days = np.arange(day_idx - 13, day_idx + 1)[::-1, None]
         valid_history_mask = (history_days >= 0)[:, 0]
         # Get historical health info given the day of encounter (shape = (M, 13))
@@ -262,9 +298,11 @@ class ContactDataset(Dataset):
             encounter_day == history_days, axis=0
         )
         health_at_encounter = health_history[encounter_at_historical_day_idx, :]
+        # Get current epidemiological compartment
+        currently_infected = infectiousness_history[0, 0] > 0.0
         if human_day_info["unobserved"]["is_recovered"]:
             current_compartment = "R"
-        elif human_day_info["unobserved"]["is_infectious"]:
+        elif currently_infected:
             current_compartment = "I"
         elif human_day_info["unobserved"]["is_exposed"]:
             current_compartment = "E"
@@ -312,13 +350,13 @@ class ContactDataset(Dataset):
 
     def _fetch_age(self, human_day_info):
         age = human_day_info["observed"].get("age", self.DEFAULT_AGE)
-        if self.bit_encoded_age:
-            if age == 0:
+        if self._bit_encoded_age:
+            if age == -1:
                 age = np.array([-1] * 8).astype("int")
             else:
                 age = np.unpackbits(np.array([age]).astype("uint8")).astype("int")
         else:
-            if age == 0:
+            if age == -1:
                 age = np.array([-1.0])
             else:
                 age = (age - self.ASSUMED_MIN_AGE) / (
@@ -327,14 +365,48 @@ class ContactDataset(Dataset):
                 age = np.array([age])
         return age
 
+    def _fetch_encounter_is_contagion(
+        self, human_day_info, valid_encounter_mask, encounter_day
+    ):
+        if "exposure_encounter" not in human_day_info["unobserved"]:
+            return np.zeros(shape=(valid_encounter_mask.shape[0],))[
+                valid_encounter_mask, None
+            ].astype("float32")
+        else:
+            return human_day_info["unobserved"]["exposure_encounter"][
+                valid_encounter_mask, None
+            ].astype("float32")
+
+    def _fetch_infectiousness_history(self, human_day_info):
+        infectiousness_history = human_day_info["unobserved"]["infectiousness"]
+        assert infectiousness_history.ndim == 1
+        if infectiousness_history.shape[0] < 14:
+            infectiousness_history = np.pad(
+                infectiousness_history,
+                ((0, 14 - infectiousness_history.shape[0]),),
+                mode="constant",
+            )
+        assert infectiousness_history.shape[0] == 14
+        return infectiousness_history[:, None]
+
     def __getitem__(self, item):
         human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
+        _requested_human_idx, _requested_day_idx = human_idx, day_idx
+        num_fetch_attempts = 0
         while True:
             try:
                 return self.get(human_idx, day_idx)
             except InvalidSetSize:
+                # We tried 5 fetch attempts for this human, but none of them worked
+                # meaning this human is borked. So we try another one.
+                if num_fetch_attempts > 5:
+                    human_idx = (human_idx + 1) % self.num_humans
+                    # Reset counters and day
+                    day_idx = _requested_day_idx
+                    num_fetch_attempts = 0
                 # Try another day
                 day_idx = (day_idx + 1) % self.num_days
+                num_fetch_attempts += 1
 
     @classmethod
     def collate_fn(cls, batch):
@@ -405,6 +477,10 @@ class ContactDataset(Dataset):
         else:
             raise TypeError
         return tensor[..., slice_]
+
+    def __del__(self):
+        if self._preloaded is not None:
+            self._preloaded.close()
 
 
 class ContactPreprocessor(ContactDataset):
