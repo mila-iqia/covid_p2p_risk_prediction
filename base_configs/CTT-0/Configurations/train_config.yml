@@ -18,7 +18,7 @@ data:
     num_workers: 8      # Set this to match the resources you have available
     relative_days: true
     clip_history_days: false
-    preload: false      # Set this to true if you have massive RAM
+    preload: false      # Set this to true if you have 16GB+ of RAM
 
 model:
   kwargs:
