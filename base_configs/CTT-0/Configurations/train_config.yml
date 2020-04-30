@@ -1,23 +1,32 @@
 data:
   paths:
-    train: "./data/1k-1-output"
-    validate: "./data/1k-1-output"
+    train:
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-0_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-1_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-2_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-3_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-4_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-5_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-6_20200430-012202-output.zip"
+    validate:
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-7_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-8_20200430-012202-output.zip"
+      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-9_20200430-012202-output.zip"
   loader_kwargs:
-    batch_size: 8
+    batch_size: 64
     shuffle: true
-    num_workers: 1
+    num_workers: 8      # Set this to match the resources you have available
     relative_days: true
-    bit_encoded_age: false
     clip_history_days: false
-    preload: false      # Set this to true if you have massive RAM
+    preload: false      # Set this to true if you have 16GB+ of RAM
 
 model:
   kwargs:
     capacity: 128
     dropout: 0.1
-    num_health_history_features: 13
+    num_health_history_features: 29
     health_history_embedding_dim: 64
-    num_health_profile_features: 7
+    num_health_profile_features: 12
     health_profile_embedding_dim: 32
     use_learned_time_embedding: true
     time_embedding_dim: 32
