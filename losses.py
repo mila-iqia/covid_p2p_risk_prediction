@@ -65,7 +65,7 @@ class ContagionLoss(nn.Module):
         super(ContagionLoss, self).__init__()
         self.allow_multiple_exposures = allow_multiple_exposures
         self.masked_bce = EntityMaskedLoss(nn.BCEWithLogitsLoss)
-        self.masker = EntityMasker()
+        self.masker = EntityMasker(mode="logsum")
 
     def forward(self, model_input, model_output):
         contagion_logit = model_output.encounter_variables[:, :, 0:1]
