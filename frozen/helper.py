@@ -64,7 +64,7 @@ def messages_to_np(human):
 def candidate_exposures(human, date):
     candidate_encounters = messages_to_np(human)
     exposed_encounters = np.zeros(len(candidate_encounters))
-    if human["exposure_message"] and human["exposure_message"] in human["clusters"].all_messages:
+    if human["exposure_message"]:
         idx = 0
         for day, clusters in human["clusters"].clusters_by_day.items():
             for cluster_id, messages in clusters.items():

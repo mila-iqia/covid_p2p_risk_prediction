@@ -65,31 +65,28 @@ def hash_to_cluster(message):
 	return cluster_id
 
 def hash_to_cluster_day(message):
+	""" Get the possible clusters based off UID (and risk) """
 	clusters = defaultdict(list)
 	bin_uid = "{0:b}".format(message.uid).zfill(4)
 	bin_risk = "{0:b}".format(message.risk).zfill(4)
 
-	for days_apart in range(0, 4):
-		if days_apart == 0:
-			binary = "".join([bin_uid, bin_risk])
-			cluster_id = int(binary, 2)
-			clusters[days_apart].append(cluster_id)
+	for days_apart in range(1, 4):
 		if days_apart == 1:
 			for possibility in ["0", "1"]:
-				bin_uid = "{0:b}".format(int(bin_uid[:3] + possibility, 2)).zfill(4)
+				bin_uid = "{0:b}".format(int(possibility + bin_uid[:3], 2)).zfill(4)
 				binary = "".join([bin_uid, bin_risk])
 				cluster_id = int(binary, 2)
 				clusters[days_apart].append(cluster_id)
 		if days_apart == 2:
 			for possibility in ["00", "01", "10", "11"]:
-				bin_uid = "{0:b}".format(int(bin_uid[:2] + possibility, 2)).zfill(4)
-				binary = "".join([bin_uid[:2] + possibility, bin_risk])
+				bin_uid = "{0:b}".format(int(possibility + bin_uid[:2], 2)).zfill(4)
+				binary = "".join([bin_uid, bin_risk])
 				cluster_id = int(binary, 2)
 				clusters[days_apart].append(cluster_id)
 		if days_apart == 3:
 			for possibility in ["000", "001", "011", "010", "100", "101", "110", "111"]:
-				bin_uid = "{0:b}".format(int(bin_uid[:1] + possibility, 2)).zfill(4)
-				binary = "".join([bin_uid[:1] + possibility, bin_risk])
+				bin_uid = "{0:b}".format(int(possibility + bin_uid[:1], 2)).zfill(4)
+				binary = "".join([bin_uid, bin_risk])
 				cluster_id = int(binary, 2)
 				clusters[days_apart].append(cluster_id)
 	return clusters
