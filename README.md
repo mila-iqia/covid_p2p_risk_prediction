@@ -16,19 +16,20 @@ This repo contains pytorch dataloaders and a Transformer model; you can start fr
 3. Extract the data to a folder called data inside the repo : `unzip covi-1k-04-27.zip data`
 4. Install dependencies (see below) and `mkdir exp`
 5. Run the transformer on CPU to make sure everything is working `python train.py exp/MY-CTT-EXPERIMENT-0 --inherit base_config/CTT-0 --config.device cpu` 
-6. Replace the transformer model with your own and start experimenting! Also welcome to change/improve the transformer model
-7. Upload your results to the results table below by making a PR to this repo
+6. Replace the transformer model with your own and start experimenting! Also welcome to change/improve the transformer model. 
+7. Upload your test set results to the results table below by making a PR to this repo
 
 ## More information
 
 ### Dataset details
 
-Dataset ID |  Clustering Type | Target Risk Predictor | Simulator Version | Risk Prediction Version | Population | Duration (days) | Seeds | Link | MD5 hash
---- | --- | --- | --- | --- | --- | --- | --- | --- | ---
-V1-1K | Heuristic  |Naive First-Order Contact Tracing | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 1,000 | 60 | 10 | [download](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/covi-1k-04-27.zip) | 0886c2001edee33dd0f59fd58062909f
-V1-50K | Heuristic |Naive First-Order Contact Tracing | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 50,000 | 60 | 5 | Coming by April 28th | TBD
-V2-1K | Heuristic | Transformer |  TBD |TBD | 1,000 | 60 | 10 | Coming by April 30th | TBD
-V2-50K | Heuristic | Transformer |  TBD |TBD | 50,000 | 60 | 10 | Coming by April 30th | TBD
+Dataset ID | Link | Seeds | Train seeds | Val seeds | Test seeds | Clustering Type | Target Risk Predictor | Simulator Version | Risk Prediction Version | Population | Duration (days)| MD5 hash
+--- | --- | --- | --- | --- | --- | --- | --- | ---| --- | --- | -- -| ---
+V1-1K | [download](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/covi-1k-04-27.zip)
+| 0-6 | 7-9 | 10-12 |  Heuristic  | Naive First-Order Contact Tracing | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 1,000 | 60 | 10  | 0886c2001edee33dd0f59fd58062909f
+V1-50K | Coming soon | 0-2 | 3 | 4 |  Heuristic | Naive First-Order Contact Tracing | [6661c1d110](https://github.com/pg2455/covid_p2p_simulation/commit/6661c1d110a1751ae1ecc1c139ed5e3e3d6bf370)  | [c650e1f981](https://github.com/mila-iqia/covid_p2p_risk_prediction/commit/c650e1f981d5fe3a67458db545e64721cea4fc38) | 50,000 | 60 | 5 | TBD
+V2-1K | Coming soon | 0-6 | 7-9 | 10-12 | Heuristic | Transformer |  TBD |TBD | 1,000 | 60 | 10 | TBD
+V2-50K | Coming soon | 0-2 | 3 | 4 | Heuristic | Transformer |  TBD |TBD | 50,000 | 60 | 10 | TBD
 
 Extract the provided zip file into `\data`.
 ```
@@ -79,6 +80,7 @@ Inputs and targets are described for 1 data example (1 person), from the point o
 
 **Metrics:** 
 
+* **L**: Lift is the gain in predictive power of the top 1% over taking a random sample, i.e. the # infected in top 1% divided by 1% of (#infected / population size) 
 * **P**: Precision is of the top 1% of highest-risk people, what % are correctly identified as being infected
 * **P-U**: Precision-Untested is of the top 1% of highest-risk people, excluding those who have a positive test, what % are correctly identified as being infected
 * **P-A**: Precision-Asymptomatic is of the top 1% of highest-risk people, excluding those who have a positive test and those who have symptoms, what % are correctly identified as being infected
@@ -91,6 +93,7 @@ Inputs and targets are described for 1 data example (1 person), from the point o
 
 ## Results 
 
+### V1-1K   
 Model Name | Brief description | ML? | P | P-U | P-A | R | R-U | R-A | MSE | MRR
 --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
 [Naive Contact Tracing](TODO) | Simple risk calculation based on number of contacts | No | - | -| - | - | - | - | - | -
