@@ -16,8 +16,8 @@ This repo contains pytorch dataloaders and a Transformer model; you can start fr
 3. Extract the data to a folder called data inside the repo : `unzip covi-1k-04-27.zip data`
 4. Install dependencies (see below) and `mkdir exp`
 5. Run the transformer on CPU to make sure everything is working `python train.py exp/MY-CTT-EXPERIMENT-0 --inherit base_config/CTT-0 --config.device cpu` 
-6. Replace the transformer model with your own and start experimenting! Also welcome to change/improve the transformer model
-7. Upload your results to the results table below by making a PR to this repo
+6. Replace the transformer model with your own and start experimenting! Also welcome to change/improve the transformer model. 
+7. Upload your test set results to the results table below by making a PR to this repo
 
 ## More information
 
@@ -91,6 +91,7 @@ Inputs and targets are described for 1 data example (1 person), from the point o
 
 **Metrics:** 
 
+* **L**: Lift is the gain in predictive power of the top 1% over taking a random sample, i.e. the # infected in top 1% divided by 1% of (#infected / population size) 
 * **P**: Precision is of the top 1% of highest-risk people, what % are correctly identified as being infected
 * **P-U**: Precision-Untested is of the top 1% of highest-risk people, excluding those who have a positive test, what % are correctly identified as being infected
 * **P-A**: Precision-Asymptomatic is of the top 1% of highest-risk people, excluding those who have a positive test and those who have symptoms, what % are correctly identified as being infected
@@ -103,6 +104,7 @@ Inputs and targets are described for 1 data example (1 person), from the point o
 
 ## Results 
 
+### V1-1K   
 Model Name | Brief description | ML? | P | P-U | P-A | R | R-U | R-A | MSE | MRR
 --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
 [Naive Contact Tracing](TODO) | Simple risk calculation based on number of contacts | No | - | -| - | - | - | - | - | -
