@@ -3,7 +3,7 @@
 import datetime
 import numpy as np
 import os
-import dill as pickle
+import pickle
 import threading
 import time
 import typing
