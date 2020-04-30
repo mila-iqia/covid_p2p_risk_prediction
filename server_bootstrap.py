@@ -52,7 +52,7 @@ def validate_args(port, exp_path, workers, verbose, mp_backend, mp_threads):
     assert workers > 0, f"invalid worker count: {workers}"
     if mp_threads is None:
         mp_threads = default_threads
-    assert mp_threads > 0, f"invalid thread count: {mp_threads}"
+    assert mp_threads >= 0, f"invalid thread count: {mp_threads}"
     return port, exp_path, workers, verbose, mp_backend, mp_threads
 
 
