@@ -91,6 +91,7 @@ Inputs and targets are described for 1 data example (1 person), from the point o
 
 **Metrics:** 
 
+* **L**: Lift is the gain in predictive power of the top 1% over taking a random sample, i.e. the # infected in top 1% divided by 1% of (#infected / population size) 
 * **P**: Precision is of the top 1% of highest-risk people, what % are correctly identified as being infected
 * **P-U**: Precision-Untested is of the top 1% of highest-risk people, excluding those who have a positive test, what % are correctly identified as being infected
 * **P-A**: Precision-Asymptomatic is of the top 1% of highest-risk people, excluding those who have a positive test and those who have symptoms, what % are correctly identified as being infected
@@ -103,6 +104,7 @@ Inputs and targets are described for 1 data example (1 person), from the point o
 
 ## Results 
 
+### V1-1K   
 Model Name | Brief description | ML? | P | P-U | P-A | R | R-U | R-A | MSE | MRR
 --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
 [Naive Contact Tracing](TODO) | Simple risk calculation based on number of contacts | No | - | -| - | - | - | - | - | -
