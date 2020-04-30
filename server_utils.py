@@ -303,14 +303,21 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     inference_result = None
     if params['risk_model'] == "transformer":
         try:
+            if daily_output['current_day'] == 5:
+                import pdb; pdb.set_trace()
             inference_result = inference_engine.infer(daily_output)
         except InvalidSetSize:
+            print("daada")
             pass  # return None for invalid samples
+
     if inference_result is not None:
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
         # ... TODO: apply the inference results to the human's risk before returning it
         #           (it will depend on the output format used by Nasim)
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-        pass
+        # TODO: think through it...
+        import pdb; pdb.set_trace()
+        human["risk"] = inference_results['infectiousness'][0]
+        human['risk_history'] = inference_results['infectiousness']
 
     return human
