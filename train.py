@@ -12,7 +12,7 @@ from speedrun import (
     TensorboardMixin,
     register_default_dispatch,
 )
-from speedrun.logging.wandb import WandBMixin
+from speedrun.logging.wandb import WandBSweepMixin, SweepRunner
 
 from models import ContactTracingTransformer
 from loader import get_dataloader
@@ -22,7 +22,7 @@ from metrics import Metrics
 import opts
 
 
-class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
+class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
     WANDB_PROJECT = "ctt"
 
     def __init__(self):
@@ -217,4 +217,4 @@ class CTTTrainer(TensorboardMixin, WandBMixin, IOMixin, BaseExperiment):
 
 
 if __name__ == "__main__":
-    CTTTrainer().run()
+    SweepRunner(CTTTrainer).run()

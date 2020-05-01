@@ -1,0 +1,50 @@
+program: train.py
+method: random
+metric:
+  name: "validation_precision top_0.01 users_not_tested_and_no_symptoms"
+  goal: maximize
+early_terminate:
+  type: hyperband
+  max_iter: 27
+  s: 2
+parameters:
+  model__kwargs__dropout:
+    distribution: uniform
+    min: 0.05
+    max: 0.5
+  model__kwargs__capacity:
+    distribution: categorical
+    values: [64, 128, 256]
+  model__kwargs__num_sabs:
+    distribution: int_uniform
+    min: 1
+    max: 5
+  model__kwargs__num_heads:
+    distribution: int_uniform
+    min: 2
+    max: 4
+  model__kwargs__sab_capacity:
+    distribution: categorical
+    values: [64, 128, 256]
+  model__kwargs__time_embedding_dim:
+    distribution: categorical
+    values: [16, 32, 64]
+  model__kwargs__health_embedding_dim:
+    distribution: categorical
+    values: [32, 64, 128, 256]
+  model__kwargs__message_embedding_dim:
+    distribution: categorical
+    values: [32, 64, 128, 256]
+  model__kwargs__encounter_partner_id_embedding_dim:
+    distribution: categorical
+    values: [32, 64]
+  model__kwargs__health_history_embedding_dim:
+    distribution: categorical
+    values: [32, 64, 128, 256]
+  model__kwargs__health_profile_embedding_dim:
+    distribution: cateogrical
+    values: [32, 64, 128, 256]
+  optim__kwargs__weight_decay:
+    distribution: log_uniform
+    min: -6
+    max: -4
