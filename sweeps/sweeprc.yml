@@ -1,8 +1,8 @@
 program: train.py
 method: random
 metric:
-  name: "validation_precision top_0.01 users_not_tested_and_no_symptoms"
-  goal: maximize
+  name: "masked_validation_mse"
+  goal: minimize
 early_terminate:
   type: hyperband
   max_iter: 27
