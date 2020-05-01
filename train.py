@@ -129,6 +129,7 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         self.log_validation_losses_and_metrics(all_losses_and_metrics)
         # Store the validation loss in cache. This will be used for checkpointing.
         self.write_to_cache("current_validation_metrics", all_losses_and_metrics)
+        self.write_to_cache("current_validation_loss", all_losses_and_metrics.loss)
         return all_losses_and_metrics
 
     def log_training_losses(self, losses):
