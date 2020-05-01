@@ -42,7 +42,7 @@ parameters:
     distribution: categorical
     values: [32, 64, 128, 256]
   model__kwargs__health_profile_embedding_dim:
-    distribution: cateogrical
+    distribution: categorical
     values: [32, 64, 128, 256]
   optim__kwargs__weight_decay:
     distribution: log_uniform
