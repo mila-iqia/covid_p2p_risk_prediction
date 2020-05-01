@@ -2,38 +2,36 @@ import datetime
 import numpy as np
 from collections import namedtuple, defaultdict
 
-Message = namedtuple('message', 'uid risk day unobs_id has_app')
-UpdateMessage = namedtuple('update_message', 'uid new_risk risk day received_at unobs_id has_app')
+Message = namedtuple('message', 'uid risk day unobs_id')
+UpdateMessage = namedtuple('update_message', 'uid new_risk risk day received_at unobs_id')
 
 def encode_message(message):
 	# encode a contact message as a string
-	return str(message.uid) + "_" + str(message.risk) + "_" + str(message.day)  + "_" + str(message.unobs_id) + "_" + str(message.has_app)
+	return str(message.uid) + "_" + str(message.risk) + "_" + str(message.day)  + "_" + str(message.unobs_id)
 
 def encode_update_message(message):
 	# encode a contact message as a string
-	return str(message.uid) + "_" + str(message.new_risk) + "_" + str(message.risk) + "_" + str(message.day) + "_" + str(message.received_at) + "_" + str(message.unobs_id) + "_" + str(message.has_app)
+	return str(message.uid) + "_" + str(message.new_risk) + "_" + str(message.risk) + "_" + str(message.day) + "_" + str(message.received_at) + "_" + str(message.unobs_id)
 
 def decode_message(message):
 	# decode a string-encoded message into a tuple
-	uid, risk, day, unobs_id, has_app = message.split("_")
+	uid, risk, day, unobs_id = message.split("_")
 	obs_uid = int(uid)
 	risk = int(risk)
 	day = int(day)
 	unobs_uid = unobs_id
-	has_app = bool(has_app)
-	return Message(obs_uid, risk, day, unobs_uid, has_app)
+	return Message(obs_uid, risk, day, unobs_uid)
 
 def decode_update_message(update_message):
 	# decode a string-encoded message into a tuple
-	uid, new_risk, risk, day, received_at, unobs_id, has_app = update_message.split("_")
+	uid, new_risk, risk, day, received_at, unobs_id = update_message.split("_")
 	obs_uid = int(uid)
 	risk = int(risk)
 	new_risk = int(new_risk)
 	day = int(day)
 	received_at = float(received_at) #datetime.datetime.strptime(received_at, "%Y-%m-%d %H:%M:%S")
 	unobs_uid = unobs_id
-	has_app = bool(has_app)
-	return UpdateMessage(obs_uid, new_risk, risk, day, received_at, unobs_uid, has_app)
+	return UpdateMessage(obs_uid, new_risk, risk, day, received_at, unobs_uid)
 
 def create_new_uid(rng):
 	# generate a 4 bit random code
@@ -66,6 +64,7 @@ def hash_to_cluster(message):
 
 def hash_to_cluster_day(message):
 	""" Get the possible clusters based off UID (and risk) """
+
 	clusters = defaultdict(list)
 	bin_uid = "{0:b}".format(message.uid).zfill(4)
 	bin_risk = "{0:b}".format(message.risk).zfill(4)

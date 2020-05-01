@@ -313,5 +313,4 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
         #           (it will depend on the output format used by Nasim)
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
         human['risk_history'] = inference_result['infectiousness']
-        print(human['risk_history'])
     return human
