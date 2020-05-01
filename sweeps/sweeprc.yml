@@ -36,6 +36,9 @@ parameters:
   model__kwargs__health_profile_embedding_dim:
     distribution: categorical
     values: [128, 192, 256]
+  model__kwargs__encounter_duration_embedding_dim:
+    distribution: categorical
+    values: [16, 32, 64]
   optim__kwargs__weight_decay:
     distribution: log_uniform
     min: -10
