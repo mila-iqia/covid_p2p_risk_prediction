@@ -1,12 +1,8 @@
 program: train.py
-method: random
+method: bayes
 metric:
-  name: "masked_validation_mse"
+  name: "validation_mse"
   goal: minimize
-early_terminate:
-  type: hyperband
-  max_iter: 27
-  s: 2
 parameters:
   model__kwargs__dropout:
     distribution: uniform
@@ -14,7 +10,7 @@ parameters:
     max: 0.5
   model__kwargs__capacity:
     distribution: categorical
-    values: [64, 128, 256]
+    values: [128, 192, 256]
   model__kwargs__num_sabs:
     distribution: int_uniform
     min: 1
@@ -36,11 +32,11 @@ parameters:
     values: [32, 64]
   model__kwargs__health_history_embedding_dim:
     distribution: categorical
-    values: [32, 64, 128, 256]
+    values: [64, 128]
   model__kwargs__health_profile_embedding_dim:
     distribution: categorical
-    values: [32, 64, 128, 256]
+    values: [128, 192, 256]
   optim__kwargs__weight_decay:
     distribution: log_uniform
-    min: -6
-    max: -4
+    min: -10
+    max: -5
