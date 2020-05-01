@@ -126,14 +126,14 @@ class InferenceWorker(threading.Thread):
                         batch_size="auto",
                         prefer="threads") as parallel:
                     results = parallel((joblib.delayed(proc_human)(human, engine) for human in sample))
-                return [(r['name'], r['risk'], r['clusters']) for r in results]
+                return [(r['name'], r['risk_history'], r['clusters']) for r in results]
             else:
                 return [InferenceWorker.process_sample(human, engine, mp_backend, mp_threads) for human in sample]
         else:
             assert isinstance(sample, dict), "unexpected input data format"
             results = proc_human(sample, engine, mp_backend, mp_threads)
             if results is not None:
-                return (results['name'], results['risk'], results['clusters'])
+                return (results['name'], results['risk_history'], results['clusters'])
             return None
 
 
@@ -303,11 +303,8 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     inference_result = None
     if params['risk_model'] == "transformer":
         try:
-            if daily_output['current_day'] == 5:
-                import pdb; pdb.set_trace()
             inference_result = inference_engine.infer(daily_output)
         except InvalidSetSize:
-            print("daada")
             pass  # return None for invalid samples
 
     if inference_result is not None:
@@ -315,9 +312,6 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
         # ... TODO: apply the inference results to the human's risk before returning it
         #           (it will depend on the output format used by Nasim)
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-        # TODO: think through it...
-        import pdb; pdb.set_trace()
-        human["risk"] = inference_results['infectiousness'][0]
-        human['risk_history'] = inference_results['infectiousness']
-
+        human['risk_history'] = inference_result['infectiousness']
+        print(human['risk_history'])
     return human
