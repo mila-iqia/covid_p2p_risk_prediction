@@ -20,9 +20,8 @@ parameters:
     min: 1
     max: 5
   model__kwargs__num_heads:
-    distribution: int_uniform
-    min: 2
-    max: 4
+    distribution: categorical
+    values: [2, 4]
   model__kwargs__sab_capacity:
     distribution: categorical
     values: [64, 128, 256]
