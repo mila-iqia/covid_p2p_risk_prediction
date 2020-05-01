@@ -259,7 +259,7 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
         all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
     human = params["human"]
-    human["clusters"].add_messages(human["messages"], params["current_day"], human["rng"])
+    human["clusters"].add_messages(human["messages"], params["current_day"]-1, human["rng"])
     human["messages"] = []
     human["clusters"].update_records(human["update_messages"])
     human["update_messages"] = []

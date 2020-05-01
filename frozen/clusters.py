@@ -52,13 +52,22 @@ class Clusters:
 
         grouped_update_messages = self.group_by_received_at(update_messages)
         for received_at, update_messages in grouped_update_messages.items():
-            old_cluster = None
             for update_message in update_messages:
                 old_message_dec = Message(update_message.uid, update_message.risk, update_message.day, update_message.unobs_id)
                 old_message_enc = encode_message(old_message_dec)
+                old_cluster = None
+
+                for cluster, messages in self.clusters_by_day[update_message.day].items():
+                    for message in messages:
+                        if message == old_message_enc:
+                            old_cluster = cluster
+                            break
+                    if old_cluster:
+                        break
                 updated_message = Message(old_message_dec.uid, update_message.new_risk, old_message_dec.day, old_message_dec.unobs_id)
                 new_cluster = hash_to_cluster(updated_message)
                 self.update_record(old_cluster, new_cluster, old_message_dec, updated_message)
+
         return self
 
     def update_record(self, old_cluster_id, new_cluster_id, message, updated_message):
