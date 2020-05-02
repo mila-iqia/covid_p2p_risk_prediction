@@ -11,11 +11,10 @@ import zmq
 
 from infer import InferenceEngine
 from loader import InvalidSetSize
-from risk_models import RiskModelTristan
 
 expected_raw_packet_param_names = [
     "start", "current_day", "all_possible_symptoms", "human",
-    "COLLECT_LOGS", "log_path", "risk_model"
+    "COLLECT_TRAINING_DATA", "log_path", "risk_model"
 ]
 
 expected_processed_packet_param_names = [
@@ -45,14 +44,16 @@ class AtomicCounter(object):
 class InferenceWorker(threading.Thread):
     """Spawns a single inference worker instance.
 
-    These workers are managed by the InferenceServerManager class. They
-    communicate with the server manager using a backend connection.
+    These workers are managed by the InferenceBroker class. They
+    communicate with the broker using a backend connection.
     """
 
     def __init__(
             self,
             experiment_directory: typing.AnyStr,
             identifier: typing.Any,
+            mp_backend: typing.AnyStr,
+            mp_threads: int,
             context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
@@ -61,9 +62,12 @@ class InferenceWorker(threading.Thread):
         self.stop_flag = threading.Event()
         self.packet_counter = AtomicCounter(init=0)
         self.time_counter = AtomicCounter(init=0.)
+        self.mp_backend = mp_backend
+        self.mp_threads = mp_threads
         if context is None:
             context = zmq.Context()
         self.context = context
+        self.init_time = None
 
     def run(self):
         # import frozen modules with classes required for unpickling
@@ -76,28 +80,19 @@ class InferenceWorker(threading.Thread):
         socket.send(b"READY")  # tell broker we're ready
         poller = zmq.Poller()
         poller.register(socket, zmq.POLLIN)
+        self.init_time = time.time()
         while not self.stop_flag.is_set():
             evts = dict(poller.poll(default_poll_delay_ms))
             if socket in evts and evts[socket] == zmq.POLLIN:
                 proc_start_time = time.time()
                 address, empty, buffer = socket.recv_multipart()
                 hdi = pickle.loads(buffer)
-                output, human = None, None
-                try:
-                    if 'risk_model' not in hdi or hdi['risk_model'] == "naive":
-                        output, human = proc_human(hdi)
-                    elif hdi['risk_model'] == "transformer":
-                        output, human = proc_human(hdi)
-                        output = engine.infer(output)  # TODO: figure out what to return from output @@@
-                except InvalidSetSize:
-                    pass  # return None for invalid samples
-                self.packet_counter.increment()
-                self.time_counter.increment(time.time() - proc_start_time)
-                if human is not None:
-                    response = pickle.dumps((human['name'], human['risk'], human['clusters']))
-                else:
-                    response = pickle.dumps(None)
+                response = self.process_sample(
+                    hdi, engine, self.mp_backend, self.mp_threads)
+                response = pickle.dumps(response)
                 socket.send_multipart([address, b"", response])
+                self.time_counter.increment(time.time() - proc_start_time)
+                self.packet_counter.increment()
         socket.close()
 
     def get_processed_count(self):
@@ -111,21 +106,49 @@ class InferenceWorker(threading.Thread):
             return float("nan")
         return tot_delay / self.packet_counter.count
 
+    def get_processing_uptime(self):
+        """Returns the fraction of total uptime that the server spends processing requests."""
+        tot_process_time, tot_time = self.time_counter.count, time.time() - self.init_time
+        return tot_process_time / tot_time
+
     def stop(self):
         """Stops the infinite data reception loop, allowing a clean shutdown."""
         self.stop_flag.set()
 
+    @staticmethod
+    def process_sample(sample, engine, mp_backend=None, mp_threads=0):
+        if isinstance(sample, list):
+            if mp_threads > 0:
+                import joblib
+                with joblib.Parallel(
+                        n_jobs=mp_threads,
+                        backend=mp_backend,
+                        batch_size="auto",
+                        prefer="threads") as parallel:
+                    results = parallel((joblib.delayed(proc_human)(human, engine) for human in sample))
+                return [(r['name'], r['risk'], r['clusters']) for r in results]
+            else:
+                return [InferenceWorker.process_sample(human, engine, mp_backend, mp_threads) for human in sample]
+        else:
+            assert isinstance(sample, dict), "unexpected input data format"
+            results = proc_human(sample, engine, mp_backend, mp_threads)
+            if results is not None:
+                return (results['name'], results['risk'], results['clusters'])
+            return None
 
-class InferenceServerManager(threading.Thread):
+
+class InferenceBroker(threading.Thread):
     """Manages inference workers through a backend connection for load balancing."""
 
     def __init__(
             self,
             model_exp_path: typing.AnyStr,
-            workers: int = 1,
-            port: int = 6688,
+            workers: int,
+            mp_backend: typing.AnyStr,
+            mp_threads: int,
+            port: int,
             verbose: bool = False,
-            verbose_print_delay: float = 30.,
+            verbose_print_delay: float = 5.,
             context: typing.Optional[zmq.Context] = None,
     ):
         threading.Thread.__init__(self)
@@ -133,6 +156,8 @@ class InferenceServerManager(threading.Thread):
             context = zmq.Context()
         self.context = context
         self.workers = workers
+        self.mp_backend = mp_backend
+        self.mp_threads = mp_threads
         self.port = port
         self.model_exp_path = model_exp_path
         self.stop_flag = threading.Event()
@@ -148,7 +173,13 @@ class InferenceServerManager(threading.Thread):
         worker_map = {}
         for worker_idx in range(self.workers):
             worker_id = f"worker:{worker_idx}"
-            worker = InferenceWorker(self.model_exp_path, worker_id, context=self.context)
+            worker = InferenceWorker(
+                self.model_exp_path,
+                worker_id,
+                self.mp_backend,
+                self.mp_threads,
+                context=self.context
+            )
             worker_map[worker_id] = worker
             worker.start()
         available_worker_ids = []
@@ -174,7 +205,8 @@ class InferenceServerManager(threading.Thread):
                 for worker_id, worker in worker_map.items():
                     packets = worker.get_processed_count()
                     delay = worker.get_averge_processing_delay()
-                    print(f"  {worker_id}:  packets={packets}  avg_delay={delay:.6f}sec")
+                    uptime = worker.get_processing_uptime()
+                    print(f"  {worker_id}:  packets={packets}  avg_delay={delay:.6f}sec  proc_time_ratio={uptime:.1%}")
                 last_update_timestamp = time.time()
         for w in worker_map.values():
             w.stop()
@@ -217,9 +249,8 @@ class InferenceClient:
         return pickle.loads(self.socket.recv())
 
 
-def proc_human(params):
+def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     """(Pre-)Processes the received simulator data for a single human."""
-
     if all([p in params for p in expected_processed_packet_param_names]):
         return params, None  # probably fetching data from data loader; skip stuff below
 
@@ -227,21 +258,12 @@ def proc_human(params):
     assert isinstance(params, dict) and \
         all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
-
     human = params["human"]
     human["clusters"].add_messages(human["messages"], params["current_day"], human["rng"])
     human["messages"] = []
-    human["clusters"].update_records(human["update_messages"], human)
+    human["clusters"].update_records(human["update_messages"])
     human["update_messages"] = []
     human["clusters"].purge(params["current_day"])
-
-    todays_date = params['start'] + datetime.timedelta(params['current_day'])
-
-    human['risk'] = RiskModelTristan.update_risk_daily(human, todays_date)
-
-    # update risk based on that day's messages
-    if human['messages']:
-        human['risk'] = RiskModelTristan.update_risk_encounters(human)
 
     todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
     is_exposed, exposure_day = frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
@@ -262,6 +284,7 @@ def proc_human(params):
         "unobserved": {
             "true_symptoms": true_symptoms,
             "is_exposed": is_exposed,
+            "exposure_encounter": exposure_encounter,
             "exposure_day": exposure_day,
             "is_recovered": is_recovered,
             "recovery_day": recovery_day,
@@ -272,9 +295,22 @@ def proc_human(params):
         }
     }
 
-    if params["COLLECT_LOGS"]:
+    if params["COLLECT_TRAINING_DATA"]:
         os.makedirs(params["log_path"], exist_ok=True)
         with open(os.path.join(params["log_path"], f"daily_human.pkl"), 'wb') as fd:
             pickle.dump(daily_output, fd)
 
-    return daily_output, human
+    inference_result = None
+    if params['risk_model'] == "transformer":
+        try:
+            inference_result = inference_engine.infer(daily_output)
+        except InvalidSetSize:
+            pass  # return None for invalid samples
+    if inference_result is not None:
+        # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        # ... TODO: apply the inference results to the human's risk before returning it
+        #           (it will depend on the output format used by Nasim)
+        # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        pass
+
+    return human

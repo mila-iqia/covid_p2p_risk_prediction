@@ -3,20 +3,19 @@ import unittest
 
 class Tests(unittest.TestCase):
 
-    DATASET_PATH = "../data/1k-1-output"
-    ZIP_DATASET_PATH = "../data/1k-1-output.zip"
+    DATASET_PATH = (
+        ZIP_PATH
+    ) = "../data/sim_v2_people-1000_days-60_init-0.01_seed-0_20200430-012202-output.zip"
     NUM_KEYS_IN_BATCH = 15
 
-    TEST_INFERENCE = True
-
-    def test_model(self):
+    def test_model_runs(self):
         from loader import ContactDataset
         from torch.utils.data import DataLoader
         from models import ContactTracingTransformer
         from addict import Dict
 
         batch_size = 5
-        path = self.ZIP_DATASET_PATH
+        path = self.DATASET_PATH
         dataset = ContactDataset(path)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
@@ -29,24 +28,69 @@ class Tests(unittest.TestCase):
             self.assertEqual(output.latent_variable.shape[0], batch_size)
             self.assertEqual(output.encounter_variables.shape[0], batch_size)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False, use_logit_sink=False
-        )
+        ctt = ContactTracingTransformer()
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False,
-            use_logit_sink=False,
-            use_encounter_partner_id_embedding=False,
-        )
+        ctt = ContactTracingTransformer(use_encounter_partner_id_embedding=False)
         test_output(ctt)
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False,
-            use_logit_sink=False,
-            use_learned_time_embedding=True,
-        )
+        ctt = ContactTracingTransformer(use_learned_time_embedding=True)
         test_output(ctt)
+
+        ctt = ContactTracingTransformer(encounter_duration_embedding_mode="sines")
+        test_output(ctt)
+
+    def test_model_padding(self):
+        import torch
+        from loader import ContactDataset
+        from torch.utils.data import DataLoader
+        from models import ContactTracingTransformer
+
+        torch.random.manual_seed(42)
+
+        batch_size = 5
+        path = self.DATASET_PATH
+        dataset = ContactDataset(path)
+        dataloader = DataLoader(
+            dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
+        )
+        batch = next(iter(dataloader))
+
+        # Padding test -- pad everything that has to do with encounters, and check
+        # whether it changes results
+        pad_size = 1
+
+        def pad(tensor):
+            if tensor.dim() == 3:
+                zeros = torch.zeros(
+                    (tensor.shape[0], pad_size, tensor.shape[2]), dtype=tensor.dtype
+                )
+            else:
+                zeros = torch.zeros((tensor.shape[0], pad_size), dtype=tensor.dtype)
+            return torch.cat([tensor, zeros], dim=1)
+
+        padded_batch = {
+            key: (pad(tensor) if key.startswith("encounter") else tensor)
+            for key, tensor in batch.items()
+        }
+        # Pad the mask
+        padded_batch["mask"] = pad(padded_batch["mask"])
+
+        # Make the model and set it to eval
+        # noinspection PyUnresolvedReferences
+        ctt = ContactTracingTransformer(num_sabs=1).eval()
+        with torch.no_grad(), ctt.diagnose():
+            output = ctt(batch)
+            padded_output = ctt(padded_batch)
+
+        encounter_soll_wert = output["encounter_variables"][..., 0]
+        encounter_ist_wert = padded_output["encounter_variables"][..., :-pad_size, 0]
+        latent_soll_wert = output["latent_variable"]
+        latent_ist_wert = padded_output["latent_variable"]
+        self.assertSequenceEqual(encounter_soll_wert.shape, encounter_ist_wert.shape)
+        self.assertSequenceEqual(latent_ist_wert.shape, latent_soll_wert.shape)
+        self.assert_(torch.allclose(encounter_soll_wert, encounter_ist_wert))
+        self.assert_(torch.allclose(latent_soll_wert, latent_ist_wert))
 
     def test_losses(self):
         from loader import ContactDataset
@@ -56,16 +100,14 @@ class Tests(unittest.TestCase):
         from addict import Dict
 
         batch_size = 5
-        path = self.ZIP_DATASET_PATH
+        path = self.DATASET_PATH
         dataset = ContactDataset(path)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
         )
         batch = next(iter(dataloader))
 
-        ctt = ContactTracingTransformer(
-            pool_latent_entities=False, use_logit_sink=False
-        )
+        ctt = ContactTracingTransformer()
         output = Dict(ctt(batch))
 
         loss_fn = ContagionLoss(allow_multiple_exposures=True)
@@ -78,7 +120,7 @@ class Tests(unittest.TestCase):
     def test_loader(self):
         from loader import get_dataloader
 
-        path = self.ZIP_DATASET_PATH
+        path = self.DATASET_PATH
         batch_size = 5
         dataloader = get_dataloader(
             batch_size=batch_size, shuffle=False, num_workers=0, path=path
@@ -97,7 +139,7 @@ class Tests(unittest.TestCase):
     def test_loader_with_multiprocessing(self):
         from loader import get_dataloader
 
-        path = self.ZIP_DATASET_PATH
+        path = self.DATASET_PATH
         batch_size = 5
         dataloader = get_dataloader(
             batch_size=batch_size, shuffle=False, num_workers=2, path=path
@@ -113,32 +155,37 @@ class Tests(unittest.TestCase):
         from loader import ContactDataset
         from addict import Dict
 
-        path = self.ZIP_DATASET_PATH
-        dataset = ContactDataset(path)
+        path = self.DATASET_PATH
 
         def validate(sample):
+            self.assertIsInstance(sample, Dict)
             self.assertEqual(
-                dataset.extract(sample, "preexisting_conditions").shape[-1],
+                dataset.extract(dataset, sample, "preexisting_conditions").shape[-1],
                 len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
             )
-            self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
-            self.assertEqual(dataset.extract(sample, "age").shape[-1], 8)
-            self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
             self.assertEqual(
-                dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 12
+                dataset.extract(dataset, sample, "test_results").shape[-1], 1
+            )
+            self.assertEqual(dataset.extract(dataset, sample, "age").shape[-1], 1)
+            self.assertEqual(dataset.extract(dataset, sample, "sex").shape[-1], 1)
+            self.assertEqual(
+                dataset.extract(
+                    dataset, sample, "reported_symptoms_at_encounter"
+                ).shape[-1],
+                28,
             )
             self.assertEqual(
-                dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
+                dataset.extract(dataset, sample, "test_results_at_encounter").shape[-1],
+                1,
             )
 
-        sample = dataset.get(890, 25)
-        self.assertIsInstance(sample, Dict)
+        dataset = ContactDataset(path)
+        sample = dataset.get(890, 3)
         validate(sample)
 
-        if self.ZIP_DATASET_PATH is not None:
-            dataset = ContactDataset(self.ZIP_DATASET_PATH, preload=False)
-            sample = dataset.get(890, 25)
-            self.assertIsInstance(sample, Dict)
+        dataset = ContactDataset(path, bit_encoded_messages=False)
+        sample = dataset.get(890, 3)
+        validate(sample)
 
     def test_tflite_model_conversion(self):
         from models import ContactTracingTransformer
@@ -152,71 +199,8 @@ class Tests(unittest.TestCase):
         for nb_messages in [10, 50, 100]:
             max_diff = convert_pytorch_model_fixed_messages(
                 model, nb_messages, working_directory="./tmp/test_dir/",
-                dataset_path=self.ZIP_DATASET_PATH)
+                dataset_path=self.DATASET_PATH)
             self.assertLess(max_diff, 0.005)
-
-    @unittest.skipIf(TEST_INFERENCE, "Data not available.")
-    def test_inference(self):
-        import numpy as np
-        import infer
-        import loader
-        import server_utils
-
-        manager = server_utils.InferenceServerManager(
-            model_exp_path=self.EXPERIMENT_PATH,
-            workers=2,
-            port=6688,
-        )
-        manager.start()
-        local_engine = infer.InferenceEngine(self.EXPERIMENT_PATH)
-        remote_engine = server_utils.InferenceClient(6688, "localhost")
-        dataset = loader.ContactDataset(self.ZIP_DATASET_PATH)
-        for _ in range(1000):
-            hdi, local_output = None, None
-            try:
-                hdi = dataset.read(
-                    np.random.randint(dataset.num_humans),
-                    np.random.randint(dataset.num_days),
-                )
-                local_output = local_engine.infer(hdi)
-            except loader.InvalidSetSize:
-                pass  # skip samples without encounters
-            # avoid sending a bad sample to remote server
-            remote_output = remote_engine.infer(hdi)
-            if local_output is None:
-                self.assertTrue(remote_output is None)
-            # TODO: test below is pretty useless until we figure out the output
-            #if local_output is not None:
-            if local_output is not None and remote_output is not None:
-                for output in [local_output, remote_output]:
-                    self.assertIsInstance(output, dict)
-                    self.assertEqual(len(output), 2)
-                    self.assertIn("contagion_proba", output)
-                    self.assertIn("infectiousness", output)
-                    self.assertIsInstance(output["contagion_proba"], np.ndarray)
-                    self.assertIsInstance(output["infectiousness"], np.ndarray)
-                self.assertEqual(
-                    local_output["contagion_proba"].shape,
-                    remote_output["contagion_proba"].shape,
-                )
-                self.assertEqual(
-                    local_output["infectiousness"].shape,
-                    remote_output["infectiousness"].shape,
-                )
-                # self.assertTrue(
-                #     np.isclose(
-                #         local_output["contagion_proba"],
-                #         remote_output["contagion_proba"],
-                #     ).all()
-                # )
-                # self.assertTrue(
-                #     np.isclose(
-                #         local_output["infectiousness"], remote_output["infectiousness"]
-                #     ).all()
-                # )
-        manager.stop()
-        manager.join()
-
 
 if __name__ == "__main__":
     unittest.main()
