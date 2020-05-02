@@ -1,4 +1,9 @@
+import numpy as np
 import unittest
+
+import ctt.inference.infer
+import ctt.data_loading
+import covid19infserver.server_utils
 
 
 class Tests(unittest.TestCase):
@@ -7,24 +12,19 @@ class Tests(unittest.TestCase):
     EXPERIMENT_PATH = "../exp/DEBUG-0"
     NUM_KEYS_IN_BATCH = 15
 
-    TEST_INFERENCE = True
-
-    @unittest.skipIf(TEST_INFERENCE, "Data not available.")
     def test_inference(self):
-        import numpy as np
-        from ctt.inference import infer
-        from ctt.data_loading import loader
-        from ctt.serving import server_utils
-
-        manager = server_utils.InferenceBroker(
+        manager = covid19infserver.server_utils.InferenceBroker(
             model_exp_path=self.EXPERIMENT_PATH,
             workers=2,
+            mp_backend="loky",
+            mp_threads=4,
             port=6688,
+            verbose=False,
         )
         manager.start()
-        local_engine = infer.InferenceEngine(self.EXPERIMENT_PATH)
-        remote_engine = server_utils.InferenceClient(6688, "localhost")
-        dataset = loader.ContactDataset(self.DATASET_PATH)
+        local_engine = ctt.inference.infer.InferenceEngine(self.EXPERIMENT_PATH)
+        remote_engine = covid19infserver.server_utils.InferenceClient(6688, "localhost")
+        dataset = ctt.data_loading.loader.ContactDataset(self.DATASET_PATH)
         for _ in range(1000):
             hdi, local_output = None, None
             try:
@@ -33,7 +33,7 @@ class Tests(unittest.TestCase):
                     np.random.randint(dataset.num_days),
                 )
                 local_output = local_engine.infer(hdi)
-            except loader.InvalidSetSize:
+            except ctt.data_loading.loader.InvalidSetSize:
                 pass  # skip samples without encounters
             # avoid sending a bad sample to remote server
             remote_output = remote_engine.infer(hdi)

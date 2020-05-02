@@ -7,7 +7,7 @@ import signal
 import sys
 import time
 
-from ctt.serving import server_utils
+import covid19infserver.server_utils
 
 default_port = 6688
 default_workers = 4
@@ -67,7 +67,7 @@ def interrupt_handler(signal, frame, broker):
 def main(args=None):
     port, exp_path, workers, verbose, mp_backend, mp_threads = \
         validate_args(*parse_args(args))
-    broker = server_utils.InferenceBroker(
+    broker = covid19infserver.server_utils.InferenceBroker(
         model_exp_path=exp_path,
         workers=workers,
         mp_backend=mp_backend,

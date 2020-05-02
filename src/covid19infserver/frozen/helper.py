@@ -1,6 +1,6 @@
 import numpy as np
 
-from frozen.utils import decode_message
+from covid19infserver.frozen.utils import decode_message
 
 PREEXISTING_CONDITIONS_META = {
     'smoker': 5,

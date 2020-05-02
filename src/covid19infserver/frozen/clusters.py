@@ -1,6 +1,8 @@
 import datetime
 from collections import defaultdict
-from frozen.utils import Message, decode_message, encode_message, decode_update_message, hash_to_cluster, hash_to_cluster_day
+
+from covid19infserver.frozen.utils import Message, decode_message, encode_message,\
+    decode_update_message, hash_to_cluster, hash_to_cluster_day
 
 
 class Clusters:
@@ -14,22 +16,23 @@ class Clusters:
         self.clusters = defaultdict(list)
         self.clusters_by_day = defaultdict(dict)
 
-    def add_messages(self, messages, current_day):
+    def add_messages(self, messages, current_day, rng=None):
         """ This function clusters new messages by scoring them against old messages in a sort of naive nearest neighbors approach"""
         for message in messages:
             m_dec = decode_message(message)
-            best_cluster = self.score_matches(m_dec, current_day)
+            best_cluster, _, best_score = self.score_matches(m_dec, current_day, rng=rng)
             self.num_messages += 1
             self.clusters[best_cluster].append(message)
             self.add_to_clusters_by_day(best_cluster, m_dec.day, message)
 
-    def score_matches(self, m_new, current_day):
-        """ This function checks a new risk message against previous clusterings, and assigns to the closest one in a brute force manner"""
+    def score_matches(self, m_new, current_day, rng=None):
+        """ This function checks a new risk message against all previous messages, and assigns to the closest one in a brute force manner"""
+        best_score = 2
         cluster_days = hash_to_cluster_day(m_new)
         best_cluster = hash_to_cluster(m_new)
 
         if self.clusters_by_day[current_day].get(best_cluster, None):
-            return best_cluster
+            return (best_cluster, None, 3)
         found = False
         for day, cluster_ids in cluster_days.items():
             for cluster_id in cluster_ids:
@@ -39,39 +42,24 @@ class Clusters:
                     break
             if found:
                 break
-        return best_cluster
+            best_score -= 1
 
+        return best_cluster, None, best_score
 
     def update_records(self, update_messages):
-        """ Updates old encounter messages with a new risk"""
+        # if we're using naive tracing, we actually don't care which records we update
         if not update_messages:
             return self
 
-        # TODO: implement a 24-hour cycle of message updates and batch the update messages by this.
         grouped_update_messages = self.group_by_received_at(update_messages)
-        # for each batch of update messages
         for received_at, update_messages in grouped_update_messages.items():
-            # for each update message in the batch
+            old_cluster = None
             for update_message in update_messages:
-                old_message_dec = Message(update_message.uid, update_message.risk, update_message.day, update_message.unobs_id)
+                old_message_dec = Message(update_message.uid, update_message.risk, update_message.day, update_message.unobs_id, update_message.has_app)
                 old_message_enc = encode_message(old_message_dec)
-                old_cluster = None
-
-                # TODO: don't use the secret info when finding the message to update. Also, optimize this loop.
-                # Find the matching message to update
-                for cluster, messages in self.clusters_by_day[update_message.day].items():
-                    for message in messages:
-                        if message == old_message_enc:
-                            old_cluster = cluster
-                            break
-                    if old_cluster:
-                        break
-
-                # Create the a new encounter message with the update risk and replace the old encounter message
-                updated_message = Message(old_message_dec.uid, update_message.new_risk, old_message_dec.day, old_message_dec.unobs_id)
+                updated_message = Message(old_message_dec.uid, update_message.new_risk, old_message_dec.day, old_message_dec.unobs_id, old_message_dec.has_app)
                 new_cluster = hash_to_cluster(updated_message)
                 self.update_record(old_cluster, new_cluster, old_message_dec, updated_message)
-
         return self
 
     def update_record(self, old_cluster_id, new_cluster_id, message, updated_message):
@@ -92,7 +80,6 @@ class Clusters:
         else:
             self.clusters_by_day[day][cluster] = [m_i_enc]
 
-
     def group_by_received_at(self, update_messages):
         """ This function takes in a set of update messages received during some time interval and clusters them based on how near in time they were received"""
         # TODO: We need more information about the actual implementation of the message protocol to use this.\
@@ -109,8 +96,6 @@ class Clusters:
         return grouped_messages
 
     def purge(self, current_day):
-        """ ensure we don't keep messages older than 14 days"""
-        # TODO: Optimize this function
         for cluster_id, messages in self.clusters_by_day[current_day - 14].items():
             for message in messages:
                 del self.clusters[cluster_id][self.clusters[cluster_id].index(message)]

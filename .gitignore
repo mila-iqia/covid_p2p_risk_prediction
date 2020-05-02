@@ -1,5 +1,27 @@
-# python cache files & build results
+# python cache/packaging files & build results
 __pycache__
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
 
 # IDE-related files/directories
 .idea
@@ -7,13 +29,34 @@ __pycache__
 *.swp
 
 # env-related files/directories
-.venv
-.env
-venv
-env
+.venv/
+.env/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
 
 # data-related files/directories
 /data
 /tmp
+/output
+/exp
 
+# unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
 
+# sphinx documentation
+docs/_build/
