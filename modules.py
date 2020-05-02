@@ -82,9 +82,23 @@ class DurationEmbedding(HealthHistoryEmbedding):
 
 
 class EntityMasker(nn.Module):
+    EPS = 1e-7
+
+    def __init__(self, mode="multiplicative"):
+        super(EntityMasker, self).__init__()
+        assert mode in ["multiplicative", "logsum"]
+        self.mode = mode
+
     def forward(self, entities, mask):
         assert mask.shape[0:2] == entities.shape[0:2]
-        return entities * mask[:, :, None]
+        if self.mode == "multiplicative":
+            return entities * mask[:, :, None]
+        elif self.mode == "logsum":
+            with torch.no_grad():
+                log_mask = torch.log(mask.clamp_min(0.) + self.EPS)
+            return entities + log_mask[:, :, None]
+        else:
+            raise NotImplementedError
 
 
 class TimeEmbedding(nn.Embedding):
@@ -111,7 +125,6 @@ class PositionalEncoding(nn.Module):
         position_dim=1,
         max_frequency=10000,
         normalize=True,
-        trainable=False,
     ):
         super(PositionalEncoding, self).__init__()
         assert (
@@ -121,81 +134,44 @@ class PositionalEncoding(nn.Module):
             (encoding_dim // position_dim) % 2
         ) == 0, "Encoding dim / postion dim must be even."
         self.encoding_dim = encoding_dim
-        self.position_dim = position_dim
+        self.position_dim = 1
         self.max_frequency = max_frequency
         self.normalize = normalize
-        self.trainable = trainable
-        self._init_parameters()
-
-    def _init_parameters(self):
-        _exps = torch.arange(
-            0, self.encoding_dim // self.position_dim, 2, dtype=torch.float
-        )
-        if self.trainable:
-            # noinspection PyArgumentList
-            _intervals = torch.nn.Parameter(
-                torch.ones(self.encoding_dim // self.position_dim // 2)
-            )
-            # noinspection PyArgumentList
-            _min_val = torch.nn.Parameter(torch.tensor([0.0], dtype=torch.float))
-            # noinspection PyArgumentList
-            _delta_val = torch.nn.Parameter(
-                torch.tensor([_exps.max()], dtype=torch.float)
-            )
-            self.register_parameter("_intervals", _intervals)
-            self.register_parameter("_min_val", _min_val)
-            self.register_parameter("_delta_val", _delta_val)
 
     def get_exponents(self, device=None):
-        if self.trainable:
-            # Make sure that the min val and delta val are positive
-            min_val = torch.relu(self._min_val)
-            delta_val = torch.clamp_min(self._delta_val, 1e-4)
-            intervals = torch.cumsum(torch.softmax(self._intervals, 0), 0)
-            exps = min_val + delta_val * intervals
-            return exps
-        else:
-            return torch.arange(
-                0,
-                self.encoding_dim // self.position_dim,
-                2,
-                dtype=torch.float,
-                device=device,
-            )
+        return torch.arange(
+            0,
+            self.encoding_dim // self.position_dim,
+            2,
+            dtype=torch.float,
+            device=device,
+        )
 
     def forward(self, positions, mask=None):
-        squeeze = False
-        if positions.ndim == 3:
-            positions = positions[:, :, None, :]
-            squeeze = True
-        # positions.shape = NTAD, where D = self.position_dim
-        N, T, A, D = positions.shape
+        assert positions.ndim == 3
+        # positions.shape = NTD, where D = self.position_dim
+        N, T, D = positions.shape
         assert D == self.position_dim
-        # The final encoding.shape = NTAC, where C = self.encoding_dim,
+        # The final encoding.shape = NTC, where C = self.encoding_dim,
         # but per input dimension, we get C // D encoding dimensions. Let C' = C // D.
         encoding_dim_per_dim = self.encoding_dim // D
         # exps is like `i` in Attention is All You Need.
         exps = self.get_exponents(device=positions.device)
         # Divisor is 10000^(i/encoding_dim), but reshaped for proper broadcasting
         divisors = torch.pow(self.max_frequency, (exps / encoding_dim_per_dim))[
-            None, None, None, None, :
+            None, None, None, :
         ]
-        # pre_sinusoids is a NTAD(C'/2) tensor.
-        pre_sinusoids = positions[:, :, :, :, None] / divisors
-        # Apply sinusoids to obtain a NTADC' tensor.
+        # pre_sinusoids is a NTD(C'/2) tensor.
+        pre_sinusoids = positions[:, :, :, None] / divisors
+        # Apply sinusoids to obtain a NTDC' tensor.
         post_sinusoids = torch.cat(
             [torch.sin(pre_sinusoids), torch.cos(pre_sinusoids)], dim=-1
         )
-        # Now flatten the last two dimensions to obtain a NTAC tensor (remember C = D * C')
-        encodings = post_sinusoids.reshape(N, T, A, self.encoding_dim)
+        # Now flatten the last two dimensions to obtain a NTC tensor (remember C = D * C')
+        encodings = post_sinusoids.reshape(N, T, self.encoding_dim)
         # Normalize if required
         if self.normalize:
             encodings = encodings / torch.norm(encodings, dim=-1, keepdim=True)
-        # Squeeze out the extra dimension if required
-        if squeeze:
-            encodings = encodings[:, :, 0, :]
         if mask is not None:
-            encodings = encodings * (
-                mask[:, :, None] if squeeze else mask[:, :, None, None]
-            )
+            encodings = encodings * (mask[:, :, None])
         return encodings

@@ -3,8 +3,7 @@ import math
 
 
 class WarmCosineMixin(object):
-    "Optim mixin that implements a scheduling recipe."
-
+    """A Mixin class for torch.optim.Optimizer that implements a warmup + cosine annealing schedule."""
     def __init__(self, *args, num_warmup_steps, num_steps, eta_min, eta_max, **kwargs):
         if "lr" not in kwargs:
             kwargs["lr"] = 0.0
@@ -19,18 +18,19 @@ class WarmCosineMixin(object):
 
     def _set_lr(self):
         rate = self.rate()
+        # noinspection PyUnresolvedReferences
         for group in self.param_groups:
             group["lr"] = rate
 
     @torch.no_grad()
     def step(self, closure=None):
-        "Update parameters and rate"
         self._step += 1
         self._set_lr()
+        # noinspection PyUnresolvedReferences
         super().step(closure=closure)
 
     def rate(self, step=None):
-        "Implement `lrate` above"
+        """Return a learning rate at a step (given or taken from internal attribute)."""
         if step is None:
             step = self._step
         if step == 0:

@@ -6,8 +6,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from speedrun import BaseExperiment, IOMixin, register_default_dispatch
-from speedrun.logging.wandb import WandBMixin
+from speedrun import (
+    BaseExperiment,
+    IOMixin,
+    TensorboardMixin,
+    register_default_dispatch,
+)
+from speedrun.logging.wandb import WandBSweepMixin, SweepRunner
 
 from models import ContactTracingTransformer
 from loader import get_dataloader
@@ -17,7 +22,7 @@ from metrics import Metrics
 import opts
 
 
-class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
+class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
     WANDB_PROJECT = "ctt"
 
     def __init__(self):
@@ -50,18 +55,17 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         # noinspection PyArgumentList
         self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
         optim_cls = getattr(opts, self.get("optim/name", "Adam"))
-        self.optim = optim_cls(
-            self.model.parameters(), **self.get("optim/kwargs")
-        )
+        self.optim = optim_cls(self.model.parameters(), **self.get("optim/kwargs"))
         self.metrics = Metrics()
 
     def _build_scheduler(self):
-        # Use one of the specialized step-wise schedulers in the opts module.
+        # Set up an epoch-wise scheduler here if you want to, but the
+        # recommendation is to use the one defined in opts.
         self.scheduler = None
 
     @property
     def device(self):
-        return self.get("device", "cpu")
+        return self.get("device", "cuda" if torch.cuda.is_available() else "cpu")
 
     @register_default_dispatch
     def train(self):
@@ -124,21 +128,36 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         all_losses_and_metrics.update(Dict(self.metrics.evaluate()))
         self.log_validation_losses_and_metrics(all_losses_and_metrics)
         # Store the validation loss in cache. This will be used for checkpointing.
+        self.write_to_cache("current_validation_metrics", all_losses_and_metrics)
         self.write_to_cache("current_validation_loss", all_losses_and_metrics.loss)
         return all_losses_and_metrics
 
     def log_training_losses(self, losses):
-        if not self.get("wandb/use", True):
-            return self
-        if self.log_wandb_now:
+        if self.log_wandb_now and self.get("wandb/use", False):
             metrics = Dict({"training_loss": losses.loss})
             metrics.update(
                 {f"training_{k}": v for k, v in losses.unweighted_losses.items()}
             )
             self.wandb_log(**metrics)
+        if self.log_scalars_now:
+            for key, value in losses.unweighted_losses.items():
+                self.log_scalar(f"training/{key}", value)
         return self
 
     def checkpoint(self, force=False):
+        # Checkpoint as required
+        if force or self.epoch % self.get("training/checkpoint/every", 1) == 0:
+            info_dict = {
+                "model": self.model.state_dict(),
+                "optim": self.optim.state_dict(),
+            }
+            torch.save(info_dict, self.checkpoint_path)
+        if self.get("training/checkpoint/if_best", True):
+            # Save a checkpoint if the validation loss is better than best
+            self.checkpoint_if_best_validation_loss()
+        return self
+
+    def checkpoint_if_best_validation_loss(self):
         current_validation_loss = self.read_from_cache(
             "current_validation_loss", float("inf")
         )
@@ -147,8 +166,6 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         )
         if current_validation_loss < best_validation_loss:
             self.write_to_cache("best_validation_loss", current_validation_loss)
-            ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
-        elif self.get_arg("force_checkpoint", force):
             ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
         else:
             ckpt_path = None
@@ -173,10 +190,11 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         return self
 
     def log_validation_losses_and_metrics(self, losses):
-        if not self.get("wandb/use", True):
-            return self
-        metrics = {f"validation_{k}": v for k, v in losses.items()}
-        self.wandb_log(**metrics)
+        if self.get("wandb/use", False):
+            metrics = {f"validation_{k}": v for k, v in losses.items()}
+            self.wandb_log(**metrics)
+        for key, value in losses.items():
+            self.log_scalar(f"validation/{key}", value)
         return self
 
     def clear_moving_averages(self):
@@ -188,15 +206,16 @@ class CTTTrainer(WandBMixin, IOMixin, BaseExperiment):
         return self
 
     def log_learning_rates(self):
-        if not self.get("wandb/use", True):
-            return self
         lrs = {
             f"lr_{i}": param_group["lr"]
             for i, param_group in enumerate(self.optim.param_groups)
         }
-        self.wandb_log(**lrs)
+        if self.get("wandb/use", False):
+            self.wandb_log(**lrs)
+        for key, value in lrs.items():
+            self.log_scalar(f"training/{key}", value)
         return self
 
 
 if __name__ == "__main__":
-    CTTTrainer().run()
+    SweepRunner(CTTTrainer).run()

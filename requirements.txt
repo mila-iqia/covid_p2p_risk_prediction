@@ -2,8 +2,6 @@ torch
 unittest
 numpy
 addict
-tensorflow==1.15.2
-onnx==1.6
-onnx-tf
-scipy
-pyzmq
+git+git://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction
+zipfile36
+wandb

@@ -1,0 +1,45 @@
+program: train.py
+method: bayes
+metric:
+  name: "validation_mse"
+  goal: minimize
+parameters:
+  model__kwargs__dropout:
+    distribution: uniform
+    min: 0.05
+    max: 0.5
+  model__kwargs__capacity:
+    distribution: categorical
+    values: [128, 192, 256]
+  model__kwargs__num_sabs:
+    distribution: int_uniform
+    min: 1
+    max: 5
+  model__kwargs__num_heads:
+    distribution: categorical
+    values: [2, 4]
+  model__kwargs__sab_capacity:
+    distribution: categorical
+    values: [64, 128, 256]
+  model__kwargs__time_embedding_dim:
+    distribution: categorical
+    values: [16, 32, 64]
+  model__kwargs__message_embedding_dim:
+    distribution: categorical
+    values: [32, 64, 128, 256]
+  model__kwargs__encounter_partner_id_embedding_dim:
+    distribution: categorical
+    values: [32, 64]
+  model__kwargs__health_history_embedding_dim:
+    distribution: categorical
+    values: [64, 128]
+  model__kwargs__health_profile_embedding_dim:
+    distribution: categorical
+    values: [128, 192, 256]
+  model__kwargs__encounter_duration_embedding_dim:
+    distribution: categorical
+    values: [16, 32, 64]
+  optim__kwargs__weight_decay:
+    distribution: log_uniform
+    min: -10
+    max: -5

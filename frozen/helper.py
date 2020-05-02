@@ -45,6 +45,7 @@ def get_test_result_array(human_test_time, date):
     results = np.zeros(14)
     result_day = (date - human_test_time).days
     if result_day >= 0 and result_day < 14:
+        # TODO: add if human test results "negative" -1
         results[result_day] = 1
     return results
 
@@ -63,7 +64,7 @@ def messages_to_np(human):
 def candidate_exposures(human, date):
     candidate_encounters = messages_to_np(human)
     exposed_encounters = np.zeros(len(candidate_encounters))
-    if human["exposure_message"] and human["exposure_message"] in human["clusters"].all_messages:
+    if human["exposure_message"]:
         idx = 0
         for day, clusters in human["clusters"].clusters_by_day.items():
             for cluster_id, messages in clusters.items():
@@ -73,7 +74,6 @@ def candidate_exposures(human, date):
                         break
                 if any(messages):
                     idx += 1
-
     return candidate_encounters, exposed_encounters
 
 
