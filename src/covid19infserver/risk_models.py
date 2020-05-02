@@ -5,7 +5,7 @@ import os
 import numpy as np
 import datetime
 
-from covid19infserver.frozen.utils import decode_message
+from covid19sim.frozen.utils import decode_message
 
 
 class RiskModelBase:

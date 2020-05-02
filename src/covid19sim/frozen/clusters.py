@@ -1,7 +1,7 @@
 import datetime
 from collections import defaultdict
 
-from covid19infserver.frozen.utils import Message, decode_message, encode_message,\
+from covid19sim.frozen.utils import Message, decode_message, encode_message,\
     decode_update_message, hash_to_cluster, hash_to_cluster_day
 
 

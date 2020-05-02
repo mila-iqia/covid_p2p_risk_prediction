@@ -11,6 +11,7 @@ import zmq
 
 from ctt.inference.infer import InferenceEngine
 from ctt.data_loading.loader import InvalidSetSize
+import covid19sim.frozen.helper
 
 expected_raw_packet_param_names = [
     "start", "current_day", "all_possible_symptoms", "human",
@@ -71,8 +72,8 @@ class InferenceWorker(threading.Thread):
 
     def run(self):
         # import frozen modules with classes required for unpickling
-        import covid19infserver.frozen.clusters
-        import covid19infserver.frozen.utils
+        import covid19sim.frozen.clusters
+        import covid19sim.frozen.utils
         engine = InferenceEngine(self.experiment_directory)
         socket = self.context.socket(zmq.REQ)
         socket.identity = str(self.identifier).encode("ascii")
@@ -254,7 +255,6 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     if all([p in params for p in expected_processed_packet_param_names]):
         return params, None  # probably fetching data from data loader; skip stuff below
 
-    import frozen.helper
     assert isinstance(params, dict) and \
         all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
@@ -266,20 +266,20 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     human["clusters"].purge(params["current_day"])
 
     todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
-    is_exposed, exposure_day = frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
-    is_recovered, recovery_day = frozen.helper.recovered_array(human["recovered_timestamp"], todays_date)
-    candidate_encounters, exposure_encounter = frozen.helper.candidate_exposures(human, todays_date)
-    reported_symptoms = frozen.helper.symptoms_to_np(human["all_reported_symptoms"], params["all_possible_symptoms"])
-    true_symptoms = frozen.helper.symptoms_to_np(human["all_symptoms"], params["all_possible_symptoms"])
+    is_exposed, exposure_day = covid19sim.frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
+    is_recovered, recovery_day = covid19sim.frozen.helper.recovered_array(human["recovered_timestamp"], todays_date)
+    candidate_encounters, exposure_encounter = covid19sim.frozen.helper.candidate_exposures(human, todays_date)
+    reported_symptoms = covid19sim.frozen.helper.symptoms_to_np(human["all_reported_symptoms"], params["all_possible_symptoms"])
+    true_symptoms = covid19sim.frozen.helper.symptoms_to_np(human["all_symptoms"], params["all_possible_symptoms"])
     daily_output = {
         "current_day": params["current_day"],
         "observed": {
             "reported_symptoms": reported_symptoms,
             "candidate_encounters": candidate_encounters,
-            "test_results": frozen.helper.get_test_result_array(human["test_time"], todays_date),
-            "preexisting_conditions": frozen.helper.conditions_to_np(human["obs_preexisting_conditions"]),
-            "age": frozen.helper.encode_age(human["obs_age"]),
-            "sex": frozen.helper.encode_sex(human["obs_sex"])
+            "test_results": covid19sim.frozen.helper.get_test_result_array(human["test_time"], todays_date),
+            "preexisting_conditions": covid19sim.frozen.helper.conditions_to_np(human["obs_preexisting_conditions"]),
+            "age": covid19sim.frozen.helper.encode_age(human["obs_age"]),
+            "sex": covid19sim.frozen.helper.encode_sex(human["obs_sex"])
         },
         "unobserved": {
             "true_symptoms": true_symptoms,
@@ -289,9 +289,9 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
             "is_recovered": is_recovered,
             "recovery_day": recovery_day,
             "infectiousness": np.array(human["infectiousnesses"]),
-            "true_preexisting_conditions": frozen.helper.conditions_to_np(human["preexisting_conditions"]),
-            "true_age": frozen.helper.encode_age(human["age"]),
-            "true_sex": frozen.helper.encode_sex(human["sex"])
+            "true_preexisting_conditions": covid19sim.frozen.helper.conditions_to_np(human["preexisting_conditions"]),
+            "true_age": covid19sim.frozen.helper.encode_age(human["age"]),
+            "true_sex": covid19sim.frozen.helper.encode_sex(human["sex"])
         }
     }
 
