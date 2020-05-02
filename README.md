@@ -1,5 +1,11 @@
 # Supervised COVID-19 risk prediction
 
+-----
+
+This is a dev repository and things might break from time to time. Please use the [official Mila repository](https://github.com/mila-iqia/covid_p2p_risk_prediction) for your experiments. 
+
+-----
+
 As part of a project for creating a COVID-19 risk-management app, we have created a supervised learning dataset for predicting individuals' level of risk of infection, as well as their source of infection, from features of individuals (e.g. pre-existing medical conditions) and features of encounters between individuals. The dataset is output by [a city-level simulator](https://github.com/pg2455/covid_p2p_simulation) (a stochastic agent-based model). 
 
 **The goal** of providing this dataset is to find machine learning models (or any method!) which can do a good job of predicting risk and sources of infection from the provided features. The features are constrained by many concerns about privacy and security, making ordinary contact-tracing impracticable; this is why we need to train the predictors on simulated data. The simulated data is parsed to 'look like' the real data that would eventually be gathered by the app. The best risk estimator(s) will be used in an app to provide personalized recommendations and interventions. There is potential for these targetted interventions to reduce the spread of COVID-19 much more effectively than generic social distancing or other measures.
