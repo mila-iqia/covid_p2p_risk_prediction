@@ -187,6 +187,20 @@ class Tests(unittest.TestCase):
         sample = dataset.get(890, 3)
         validate(sample)
 
+    def test_tflite_model_conversion(self):
+        from models import ContactTracingTransformer
+        from export_to_tflite import convert_pytorch_model_fixed_messages
+
+        # Instantiate new model
+        model = ContactTracingTransformer()
+        model.eval()
+
+        # Test the conversion to TFLite
+        for nb_messages in [10, 50, 100]:
+            max_diff = convert_pytorch_model_fixed_messages(
+                model, nb_messages, working_directory="./tmp/test_dir/",
+                dataset_path=self.DATASET_PATH)
+            self.assertLess(max_diff, 0.005)
 
 if __name__ == "__main__":
     unittest.main()
