@@ -78,6 +78,7 @@ class ContactDataset(Dataset):
         relative_days=True,
         clip_history_days=False,
         bit_encoded_messages=True,
+        transforms=None,
         preload=False,
     ):
         """
@@ -98,6 +99,8 @@ class ContactDataset(Dataset):
         bit_encoded_messages : bool
             Whether messages are encoded as a bit vector (True) or floats
             between 0 and 1 (False).
+        transforms: callable
+            Transforms to apply before sending sample to the collator.
         preload : bool
             If path points to a zipfile, load the entire file to RAM (as a
             BytesIO object).
@@ -110,6 +113,7 @@ class ContactDataset(Dataset):
         self.relative_days = relative_days
         self.clip_history_days = clip_history_days
         self.bit_encoded_messages = bit_encoded_messages
+        self.transforms = transforms
         self.preload = preload
         # Prepwork
         self._preloaded = None
@@ -355,7 +359,7 @@ class ContactDataset(Dataset):
             history_days = history_days - day_idx
             encounter_day = encounter_day - day_idx
         # This should be it
-        return Dict(
+        sample = Dict(
             human_idx=torch.from_numpy(np.array([human_idx])),
             day_idx=torch.from_numpy(np.array([day_idx])),
             health_history=torch.from_numpy(health_history).float(),
@@ -371,6 +375,9 @@ class ContactDataset(Dataset):
             encounter_duration=torch.from_numpy(encounter_duration[:, None]).float(),
             encounter_is_contagion=torch.from_numpy(encounter_is_contagion).float(),
         )
+        if self.transforms is not None:
+            sample = self.transforms(sample)
+        return sample
 
     def _fetch_age(self, human_day_info):
         age = human_day_info["observed"].get("age", self.DEFAULT_AGE)
