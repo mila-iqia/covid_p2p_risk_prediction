@@ -14,13 +14,13 @@ from speedrun import (
 )
 from speedrun.logging.wandb import WandBSweepMixin, SweepRunner
 
-from models import ContactTracingTransformer
-from loader import get_dataloader
-from losses import WeightedSum
-from utils import to_device, momentum_accumulator
-from metrics import Metrics
-import opts
-from transforms import get_transforms
+from ctt.models.transformer import ContactTracingTransformer
+from ctt.data_loading.loader import get_dataloader
+from ctt.losses import WeightedSum
+from ctt.utils import to_device, momentum_accumulator
+from ctt.metrics import Metrics
+from ctt import opts
+from ctt.data_loading.transforms import get_transforms
 
 
 class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):

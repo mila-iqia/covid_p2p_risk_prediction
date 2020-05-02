@@ -1,8 +1,8 @@
 import os
 from speedrun import BaseExperiment
 
-from loader import ContactPreprocessor
-from models import ContactTracingTransformer
+from ctt.data_loading.loader import ContactPreprocessor
+from ctt.models.transformer import ContactTracingTransformer
 import torch
 
 
@@ -41,7 +41,7 @@ class InferenceEngine(BaseExperiment):
 
 
 if __name__ == "__main__":
-    from loader import ContactDataset
+    from ctt.data_loading.loader import ContactDataset
 
     dataset = ContactDataset(
         path="/Users/nrahaman/Python/ctt/data/sim_people-1000_days-60_init-0"

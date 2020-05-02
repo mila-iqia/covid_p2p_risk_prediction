@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from utils import thermometer_encoding
+from ctt.utils import thermometer_encoding
 
 
 class HealthHistoryEmbedding(nn.Sequential):

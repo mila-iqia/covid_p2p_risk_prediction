@@ -9,8 +9,8 @@ import time
 import typing
 import zmq
 
-from infer import InferenceEngine
-from loader import InvalidSetSize
+from ctt.inference.infer import InferenceEngine
+from ctt.data_loading.loader import InvalidSetSize
 
 expected_raw_packet_param_names = [
     "start", "current_day", "all_possible_symptoms", "human",
@@ -71,8 +71,6 @@ class InferenceWorker(threading.Thread):
 
     def run(self):
         # import frozen modules with classes required for unpickling
-        import frozen.clusters
-        import frozen.utils
         engine = InferenceEngine(self.experiment_directory)
         socket = self.context.socket(zmq.REQ)
         socket.identity = str(self.identifier).encode("ascii")
