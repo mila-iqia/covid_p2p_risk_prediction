@@ -5,6 +5,7 @@ import glob
 from typing import Union
 import zipfile
 import io
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -34,39 +35,50 @@ class ContactDataset(Dataset):
         "valid_history_mask",
     ]
 
-    INPUT_FIELD_TO_SLICE_MAPPING = {
-        "human_idx": ("human_idx", slice(None)),
-        "day_idx": ("day_idx", slice(None)),
-        "health_history": ("health_history", slice(None)),
-        "reported_symptoms": ("health_history", slice(0, 28)),
-        "test_results": ("health_history", slice(28, 29)),
-        "age": ("health_profile", slice(0, 1)),
-        "sex": ("health_profile", slice(1, 2)),
-        "preexisting_conditions": ("health_profile", slice(2, 12)),
-        "history_days": ("history_days", slice(None)),
-        "valid_history_mask": ("valid_history_mask", slice(None)),
-        "current_compartment": ("current_compartment", slice(None)),
-        "infectiousness_history": ("infectiousness_history", slice(None)),
-        "reported_symptoms_at_encounter": ("encounter_health", slice(0, 28)),
-        "test_results_at_encounter": ("encounter_health", slice(28, 29)),
-        "encounter_message": ("encounter_message", slice(None)),
-        "encounter_partner_id": ("encounter_partner_id", slice(None)),
-        "encounter_duration": ("encounter_duration", slice(None)),
-        "encounter_day": ("encounter_day", slice(None)),
-        "encounter_is_contagion": ("encounter_is_contagion", slice(None)),
+    DEFAULT_INPUT_FIELD_TO_SLICE_MAPPING = {
+        "human_idx": ["human_idx", slice(None)],
+        "day_idx": ["day_idx", slice(None)],
+        "health_history": ["health_history", slice(None)],
+        "reported_symptoms": ["health_history", slice(0, 28)],
+        "test_results": ["health_history", slice(28, 29)],
+        "age": ["health_profile", slice(0, 1)],
+        "sex": ["health_profile", slice(1, 2)],
+        "preexisting_conditions": ["health_profile", slice(2, 12)],
+        "history_days": ["history_days", slice(None)],
+        "valid_history_mask": ["valid_history_mask", slice(None)],
+        "current_compartment": ["current_compartment", slice(None)],
+        "infectiousness_history": ["infectiousness_history", slice(None)],
+        "reported_symptoms_at_encounter": ["encounter_health", slice(0, 28)],
+        "test_results_at_encounter": ["encounter_health", slice(28, 29)],
+        "encounter_message": ["encounter_message", slice(None)],
+        "encounter_partner_id": ["encounter_partner_id", slice(None)],
+        "encounter_duration": ["encounter_duration", slice(None)],
+        "encounter_day": ["encounter_day", slice(None)],
+        "encounter_is_contagion": ["encounter_is_contagion", slice(None)],
     }
 
     # Compat with previous versions of the dataset
+    # Age
     DEFAULT_AGE = 0
     ASSUMED_MAX_AGE = 100
     ASSUMED_MIN_AGE = 1
     AGE_NOT_AVAILABLE = 0
+    # Sex
     DEFAULT_SEX = 0
+    # Risk
+    ASSUMED_MAX_RISK = 15
+    ASSUMED_MIN_RISK = 0
+    # Encounters
     DEFAULT_ENCOUNTER_DURATION = 10
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     def __init__(
-        self, path: str, relative_days=True, clip_history_days=False, preload=False,
+        self,
+        path: str,
+        relative_days=True,
+        clip_history_days=False,
+        bit_encoded_messages=True,
+        preload=False,
     ):
         """
         Parameters
@@ -83,6 +95,9 @@ class ContactDataset(Dataset):
             Whether `history_days` (in the output) clips to the equivalent of
             day 0 for days that predate records. E.g. in day 5, whether
             `history_days[10]` is -5 (True) or -10 (False).
+        bit_encoded_messages : bool
+            Whether messages are encoded as a bit vector (True) or floats
+            between 0 and 1 (False).
         preload : bool
             If path points to a zipfile, load the entire file to RAM (as a
             BytesIO object).
@@ -94,10 +109,12 @@ class ContactDataset(Dataset):
         self.path = path
         self.relative_days = relative_days
         self.clip_history_days = clip_history_days
+        self.bit_encoded_messages = bit_encoded_messages
         self.preload = preload
         # Prepwork
         self._preloaded = None
         self._read_data()
+        self._set_input_fields_to_slice_mapping()
 
     def _read_data(self):
         if os.path.isdir(self.path):
@@ -148,6 +165,12 @@ class ContactDataset(Dataset):
         # Compute numbers of days and humans
         self._num_days = max(day_idxs) - self._day_idx_offset + 1
         self._num_humans = max(human_idxs) - self._human_idx_offset + 1
+
+    def _set_input_fields_to_slice_mapping(self):
+        self._input_fields_to_slice_mapping = deepcopy(
+            self.DEFAULT_INPUT_FIELD_TO_SLICE_MAPPING
+        )
+        # This method might grow.
 
     @property
     def num_humans(self):
@@ -221,8 +244,11 @@ class ContactDataset(Dataset):
                 -> `infectiousness_history`: 14-day history of infectiousness,
                     of shape (14, 1).
                 -> `encounter_health`: health during encounter, of shape (M, 13)
-                -> `encounter_message`: risk transmitted during encounter, of shape (M, 8).
-                        These are the 8 bits of info that can be sent between users.
+                -> `encounter_message`: risk transmitted during encounter,
+                        of shape (M, 8) if `self.bit_encoded_messages` is set to True,
+                        of shape (M, 1) otherwise.
+                        Bit encoded messages means that the integer is represented
+                        as their corresponding bit vector.
                 -> `encounter_partner_id`: id of the other in the encounter,
                         of shape (M, num_id_bits). If num_id_bits = 16, it means that the
                         id (say 65535) is represented in 16-bit binary.
@@ -272,10 +298,8 @@ class ContactDataset(Dataset):
             .astype("float32")
         )
         # Convert risk
-        encounter_message = (
-            np.unpackbits(encounter_message.astype("uint8"))
-            .reshape(num_encounters, -1)
-            .astype("float32")
+        encounter_message = self._fetch_encounter_message(
+            encounter_message, num_encounters
         )
         encounter_is_contagion = self._fetch_encounter_is_contagion(
             human_day_info, valid_encounter_mask, encounter_day
@@ -389,6 +413,21 @@ class ContactDataset(Dataset):
         assert infectiousness_history.shape[0] == 14
         return infectiousness_history[:, None]
 
+    def _fetch_encounter_message(self, encounter_message, num_encounters):
+        if self.bit_encoded_messages:
+            # Convert to bit-vector
+            return (
+                np.unpackbits(encounter_message.astype("uint8"))
+                .reshape(num_encounters, -1)
+                .astype("float32")
+            )
+        else:
+            # max-min normalize message
+            return (
+                (encounter_message[:, None] - self.ASSUMED_MIN_RISK)
+                / (self.ASSUMED_MAX_RISK - self.ASSUMED_MIN_RISK)
+            ).astype("float32")
+
     def __getitem__(self, item):
         human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
         _requested_human_idx, _requested_day_idx = human_idx, day_idx
@@ -435,9 +474,9 @@ class ContactDataset(Dataset):
         collates.update(padded_collates)
         return collates
 
-    @classmethod
+    @staticmethod
     def extract(
-        cls,
+        cls_or_self,
         tensor_or_dict: Union[torch.Tensor, dict],
         query_field: str,
         tensor_name: str = None,
@@ -452,6 +491,8 @@ class ContactDataset(Dataset):
                `query_fields`.
         Parameters
         ----------
+        cls_or_self: type or ContactDataset
+            Either an instance (self) or the class.
         tensor_or_dict : torch.Tensor or dict
             Torch tensor or dictionary.
         query_field : str
@@ -465,12 +506,27 @@ class ContactDataset(Dataset):
         -------
         torch.Tensor
         """
-        assert query_field in cls.INPUT_FIELD_TO_SLICE_MAPPING
+        if isinstance(cls_or_self, type) and issubclass(cls_or_self, ContactDataset):
+            mapping = cls_or_self.DEFAULT_INPUT_FIELD_TO_SLICE_MAPPING
+        elif isinstance(cls_or_self, ContactDataset):
+            mapping = cls_or_self._input_fields_to_slice_mapping
+        else:
+            raise TypeError
+        return cls_or_self._extract(mapping, tensor_or_dict, query_field, tensor_name,)
+
+    @staticmethod
+    def _extract(
+        field_to_slice_mapping: dict,
+        tensor_or_dict: Union[torch.Tensor, dict],
+        query_field: str,
+        tensor_name: str = None,
+    ) -> torch.Tensor:
+        assert query_field in field_to_slice_mapping
         if isinstance(tensor_or_dict, dict):
-            tensor_name, slice_ = cls.INPUT_FIELD_TO_SLICE_MAPPING[query_field]
+            tensor_name, slice_ = field_to_slice_mapping[query_field]
             tensor = tensor_or_dict[tensor_name]
         elif torch.is_tensor(tensor_or_dict):
-            target_tensor_name, slice_ = cls.INPUT_FIELD_TO_SLICE_MAPPING[query_field]
+            target_tensor_name, slice_ = field_to_slice_mapping[query_field]
             if tensor_name is not None:
                 assert target_tensor_name == tensor_name
             tensor = tensor_or_dict

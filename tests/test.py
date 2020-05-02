@@ -156,24 +156,34 @@ class Tests(unittest.TestCase):
         from addict import Dict
 
         path = self.DATASET_PATH
-        dataset = ContactDataset(path)
 
         def validate(sample):
             self.assertIsInstance(sample, Dict)
             self.assertEqual(
-                dataset.extract(sample, "preexisting_conditions").shape[-1],
+                dataset.extract(dataset, sample, "preexisting_conditions").shape[-1],
                 len(dataset.DEFAULT_PREEXISTING_CONDITIONS),
             )
-            self.assertEqual(dataset.extract(sample, "test_results").shape[-1], 1)
-            self.assertEqual(dataset.extract(sample, "age").shape[-1], 1)
-            self.assertEqual(dataset.extract(sample, "sex").shape[-1], 1)
             self.assertEqual(
-                dataset.extract(sample, "reported_symptoms_at_encounter").shape[-1], 28
+                dataset.extract(dataset, sample, "test_results").shape[-1], 1
+            )
+            self.assertEqual(dataset.extract(dataset, sample, "age").shape[-1], 1)
+            self.assertEqual(dataset.extract(dataset, sample, "sex").shape[-1], 1)
+            self.assertEqual(
+                dataset.extract(
+                    dataset, sample, "reported_symptoms_at_encounter"
+                ).shape[-1],
+                28,
             )
             self.assertEqual(
-                dataset.extract(sample, "test_results_at_encounter").shape[-1], 1
+                dataset.extract(dataset, sample, "test_results_at_encounter").shape[-1],
+                1,
             )
 
+        dataset = ContactDataset(path)
+        sample = dataset.get(890, 3)
+        validate(sample)
+
+        dataset = ContactDataset(path, bit_encoded_messages=False)
         sample = dataset.get(890, 3)
         validate(sample)
 
