@@ -12,7 +12,7 @@ This repo contains pytorch dataloaders and a Transformer model; you can start fr
 ## Quick Start / Overview
 
 1. Clone or fork this repo
-2. [Download the data](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/covi-1k-04-27.zip)
+2. [Download some data (here's a train/val of 1k people for 60 days)](https://covid-p2p-simulation.s3.ca-central-1.amazonaws.com/1k_app_0.5.zip)
 3. Extract the data to a folder called data inside the repo : `unzip covi-1k-04-27.zip data`
 4. Install dependencies (see below) and `mkdir exp`
 5. Run the transformer on CPU to make sure everything is working `python train.py exp/MY-CTT-EXPERIMENT-0 --inherit base_config/CTT-0 --config.device cpu` 
