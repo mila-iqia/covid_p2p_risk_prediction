@@ -24,7 +24,7 @@ class InferenceEngine(BaseExperiment):
     def load(self):
         path = os.path.join(self.checkpoint_directory, "best.ckpt")
         assert os.path.exists(path)
-        state = torch.load(path)
+        state = torch.load(path, map_location=torch.device("cpu"))
         self.model.load_state_dict(state["model"])
         self.model.eval()
         return self

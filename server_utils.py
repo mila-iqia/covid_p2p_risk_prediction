@@ -126,14 +126,14 @@ class InferenceWorker(threading.Thread):
                         batch_size="auto",
                         prefer="threads") as parallel:
                     results = parallel((joblib.delayed(proc_human)(human, engine) for human in sample))
-                return [(r['name'], r['risk'], r['clusters']) for r in results]
+                return [(r['name'], r['risk_history'], r['clusters']) for r in results]
             else:
                 return [InferenceWorker.process_sample(human, engine, mp_backend, mp_threads) for human in sample]
         else:
             assert isinstance(sample, dict), "unexpected input data format"
             results = proc_human(sample, engine, mp_backend, mp_threads)
             if results is not None:
-                return (results['name'], results['risk'], results['clusters'])
+                return (results['name'], results['risk_history'], results['clusters'])
             return None
 
 
@@ -258,13 +258,16 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
     assert isinstance(params, dict) and \
         all([p in params for p in expected_raw_packet_param_names]), \
         "unexpected/broken proc_human input format between simulator and inference service"
+
+    # Cluster Messages
     human = params["human"]
-    human["clusters"].add_messages(human["messages"], params["current_day"], human["rng"])
+    human["clusters"].add_messages(human["messages"], params["current_day"]-1)
     human["messages"] = []
     human["clusters"].update_records(human["update_messages"])
     human["update_messages"] = []
     human["clusters"].purge(params["current_day"])
 
+    # Format for supervised learning / transformer inference
     todays_date = params["start"] + datetime.timedelta(days=params["current_day"])
     is_exposed, exposure_day = frozen.helper.exposure_array(human["infection_timestamp"], todays_date)
     is_recovered, recovery_day = frozen.helper.recovered_array(human["recovered_timestamp"], todays_date)
@@ -306,11 +309,11 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
             inference_result = inference_engine.infer(daily_output)
         except InvalidSetSize:
             pass  # return None for invalid samples
+
     if inference_result is not None:
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
         # ... TODO: apply the inference results to the human's risk before returning it
         #           (it will depend on the output format used by Nasim)
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-        pass
-
+        human['risk_history'] = inference_result['infectiousness']
     return human

@@ -229,7 +229,7 @@ class ContactDataset(Dataset):
             An addict with the following attributes:
                 -> `health_history`: 14-day health history of self of shape (14, 29)
                         with channels `reported_symptoms` (28), `test_results`(1).
-                -> `health_profile`: health profile of the individual, 
+                -> `health_profile`: health profile of the individual,
                     of shape (12,), containing channels `age` (1), `sex` (1), and
                     `preexisting_conditions` (10,). Note that `age` is a float taking
                     values in Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to
@@ -263,7 +263,7 @@ class ContactDataset(Dataset):
         """
         if human_day_info is None:
             human_day_info = self.read(human_idx, day_idx)
-        assert day_idx + self._day_idx_offset == human_day_info["current_day"]
+        # assert day_idx + self._day_idx_offset == human_day_info["current_day"]
         day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
@@ -555,7 +555,8 @@ class ContactPreprocessor(ContactDataset):
 
     def _read_data(self):
         # Defuse this method since it's not needed anymore
-        pass
+        self._day_idx_offset = 0
+        self._human_idx_offset = 1
 
     def preprocess(self, human_day_info, as_batch=True):
         # noinspection PyTypeChecker
