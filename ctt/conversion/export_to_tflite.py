@@ -26,7 +26,6 @@ changed to reflect what the saved pytorch model expects.
 import numpy
 import os
 import shutil
-import subprocess
 
 import onnx
 from onnx_tf.backend import prepare
@@ -36,8 +35,8 @@ import tensorflow as tf
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.python.saved_model import tag_constants
 
-from models import ContactTracingTransformer
-from loader import get_dataloader
+from ctt.models.transformer import ContactTracingTransformer
+from ctt.data_loading.loader import get_dataloader
 
 NB_EXAMPLES_FOR_SANITY_CHECK = 100
 NB_MESSAGES_BUCKETS = [10, 50, 100, 1000]

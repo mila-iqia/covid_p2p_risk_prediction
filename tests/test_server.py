@@ -12,9 +12,9 @@ class Tests(unittest.TestCase):
     @unittest.skipIf(TEST_INFERENCE, "Data not available.")
     def test_inference(self):
         import numpy as np
-        import infer
-        import loader
-        import server_utils
+        from ctt.inference import infer
+        from ctt.data_loading import loader
+        from ctt.serving import server_utils
 
         manager = server_utils.InferenceBroker(
             model_exp_path=self.EXPERIMENT_PATH,

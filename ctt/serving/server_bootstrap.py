@@ -7,7 +7,7 @@ import signal
 import sys
 import time
 
-import server_utils
+from ctt.serving import server_utils
 
 default_port = 6688
 default_workers = 4

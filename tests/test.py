@@ -9,9 +9,9 @@ class Tests(unittest.TestCase):
     NUM_KEYS_IN_BATCH = 15
 
     def test_model_runs(self):
-        from loader import ContactDataset
+        from ctt.data_loading.loader import ContactDataset
         from torch.utils.data import DataLoader
-        from models import ContactTracingTransformer
+        from ctt.models.transformer import ContactTracingTransformer
         from addict import Dict
 
         batch_size = 5
@@ -42,9 +42,9 @@ class Tests(unittest.TestCase):
 
     def test_model_padding(self):
         import torch
-        from loader import ContactDataset
+        from ctt.data_loading.loader import ContactDataset
         from torch.utils.data import DataLoader
-        from models import ContactTracingTransformer
+        from ctt.models.transformer import ContactTracingTransformer
 
         torch.random.manual_seed(42)
 
@@ -93,10 +93,10 @@ class Tests(unittest.TestCase):
         self.assert_(torch.allclose(latent_soll_wert, latent_ist_wert))
 
     def test_losses(self):
-        from loader import ContactDataset
+        from ctt.data_loading.loader import ContactDataset
         from torch.utils.data import DataLoader
-        from models import ContactTracingTransformer
-        from losses import ContagionLoss, InfectiousnessLoss
+        from ctt.models.transformer import ContactTracingTransformer
+        from ctt.losses import ContagionLoss, InfectiousnessLoss
         from addict import Dict
 
         batch_size = 5
@@ -118,7 +118,7 @@ class Tests(unittest.TestCase):
         loss = loss_fn(batch, output)
 
     def test_loader(self):
-        from loader import get_dataloader
+        from ctt.data_loading.loader import get_dataloader
 
         path = self.DATASET_PATH
         batch_size = 5
@@ -137,7 +137,7 @@ class Tests(unittest.TestCase):
         batch = next(iter(dataloader))
 
     def test_loader_with_multiprocessing(self):
-        from loader import get_dataloader
+        from ctt.data_loading.loader import get_dataloader
 
         path = self.DATASET_PATH
         batch_size = 5
@@ -152,7 +152,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(len(batch[key]), batch_size)
 
     def test_dataset(self):
-        from loader import ContactDataset
+        from ctt.data_loading.loader import ContactDataset
         from addict import Dict
 
         path = self.DATASET_PATH
@@ -188,8 +188,8 @@ class Tests(unittest.TestCase):
         validate(sample)
 
     def test_tflite_model_conversion(self):
-        from models import ContactTracingTransformer
-        from export_to_tflite import convert_pytorch_model_fixed_messages
+        from ctt.models.transformer import ContactTracingTransformer
+        from ctt.conversion.export_to_tflite import convert_pytorch_model_fixed_messages
 
         # Instantiate new model
         model = ContactTracingTransformer()

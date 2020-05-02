@@ -4,8 +4,8 @@ from contextlib import contextmanager
 import torch
 import torch.nn as nn
 
-import modules as mods
-import attn
+from ctt.models import modules as mods, attn
+
 
 # Legend
 #   B: batch (i.e. humans)
