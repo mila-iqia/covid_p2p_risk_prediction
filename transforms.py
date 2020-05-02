@@ -1,4 +1,6 @@
 import torch
+from torchvision.transforms import Compose
+
 from addict import Dict
 
 
@@ -35,4 +37,9 @@ class QuantizedGaussianMessageNoise(Transform):
 
 
 def get_transforms(config):
-    pass
+    transforms = []
+    for name in config.get("names", []):
+        cls = globals()[name]
+        kwargs = config["kwargs"].get(name, "{}")
+        transforms.append(cls(**kwargs))
+    return Compose(transforms)

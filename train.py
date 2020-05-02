@@ -20,6 +20,7 @@ from losses import WeightedSum
 from utils import to_device, momentum_accumulator
 from metrics import Metrics
 import opts
+from transforms import get_transforms
 
 
 class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
@@ -43,12 +44,18 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
 
     def _build_loaders(self):
         train_path = self.get("data/paths/train", ensure_exists=True)
+        train_transforms = get_transforms(self.get("data/transforms/train", {}))
         validate_path = self.get("data/paths/validate", ensure_exists=True)
+        validate_transforms = get_transforms(self.get("data/transforms/validate", {}))
         self.train_loader = get_dataloader(
-            path=train_path, **self.get("data/loader_kwargs", ensure_exists=True)
+            path=train_path,
+            transforms=train_transforms,
+            **self.get("data/loader_kwargs", ensure_exists=True),
         )
         self.validate_loader = get_dataloader(
-            path=validate_path, **self.get("data/loader_kwargs", ensure_exists=True)
+            path=validate_path,
+            transforms=validate_transforms,
+            **self.get("data/loader_kwargs", ensure_exists=True),
         )
 
     def _build_criteria_and_optim(self):
