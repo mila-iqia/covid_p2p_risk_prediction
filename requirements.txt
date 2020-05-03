@@ -1,5 +1,9 @@
-git+git://github.com/nasimrahaman/ctt@master
+git+git://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction
 git+git://github.com/pg2455/covid_p2p_simulation@develop
+git+git://github.com/nasimrahaman/ctt@master
+orderedset
+addict
+dill
 joblib
 numpy
 pyzmq
