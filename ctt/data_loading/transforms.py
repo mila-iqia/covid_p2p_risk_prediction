@@ -36,6 +36,24 @@ class QuantizedGaussianMessageNoise(Transform):
         return input_dict
 
 
+class FractionalEncounterDurationNoise(Transform):
+    def __init__(self, fractional_noise=0.1):
+        self.fractional_noise = fractional_noise
+
+    def apply(self, input_dict: Dict) -> Dict:
+        encounter_duration = input_dict["encounter_duration"]
+        fractional_noise = 1 + (
+            torch.randn(
+                tuple(encounter_duration.shape),
+                dtype=encounter_duration.dtype,
+                device=encounter_duration.device,
+            )
+            * self.fractional_noise
+        ).clamp_min(0)
+        input_dict["encounter_duration"] = encounter_duration * fractional_noise
+        return input_dict
+
+
 def get_transforms(config):
     transforms = []
     for name in config.get("names", []):

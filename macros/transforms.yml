@@ -5,6 +5,9 @@ data:
     train:
       names:
         - QuantizedGaussianMessageNoise
+        - FractionalEncounterDurationNoise
       kwargs:
         QuantizedGaussianMessageNoise:
           noise_std: 1.5
+        FractionalEncounterDurationNoise:
+          fractional_noise: 0.1
