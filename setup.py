@@ -28,9 +28,9 @@ setup(
     zip_safe=False,
     python_requires='>=3.7',
     install_requires=[
-        "speedrun @ git+https://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction#egg=ctt",
+        "speedrun @ git+https://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction#egg=speedrun",
         "ctt @ git+https://github.com/nasimrahaman/ctt@master#egg=ctt",
-        "covid19sim @ git+https://github.com/pg2455/covid_p2p_simulation@develop#egg=ctt",
+        "covid19sim @ git+https://github.com/pg2455/covid_p2p_simulation@develop#egg=covid19sim",
         "addict",
         "dill",
         "joblib",
