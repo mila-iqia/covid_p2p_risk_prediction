@@ -1,4 +1,8 @@
+git+git://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction
 git+git://github.com/nasimrahaman/ctt@master
+orderedset
+addict
+dill
 joblib
 numpy
 pyzmq
