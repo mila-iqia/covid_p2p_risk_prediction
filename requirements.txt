@@ -7,5 +7,4 @@ dill
 joblib
 numpy
 pyzmq
-torch
 tqdm
