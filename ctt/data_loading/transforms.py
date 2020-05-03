@@ -31,7 +31,7 @@ class QuantizedGaussianMessageNoise(Transform):
                 device=encounter_message.device,
             )
             * self.noise_std
-        ) * (1 / self.num_risk_levels)
+        ) * (1 / (self.num_risk_levels - 1))
         input_dict["encounter_message"] = torch.clamp(encounter_message + noise, 0, 1)
         return input_dict
 
