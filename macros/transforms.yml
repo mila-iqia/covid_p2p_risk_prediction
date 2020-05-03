@@ -1,0 +1,10 @@
+data:
+  loader_kwargs:
+    bit_encoded_messages: false
+  transforms:
+    train:
+      names:
+        - QuantizedGaussianMessageNoise
+      kwargs:
+        QuantizedGaussianMessageNoise:
+          noise_std: 1.5
