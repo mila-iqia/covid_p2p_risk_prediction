@@ -29,6 +29,7 @@ setup(
     python_requires='>=3.7.0',
     install_requires=[
         "ctt @ git+https://github.com/nasimrahaman/ctt@master#egg=ctt",
+        "covid19sim @ git+https://github.com/pg2455/covid_p2p_simulation@develop#egg=ctt",
         "joblib>=0.14.1",
         "numpy>=1.16",
         "pyzmq>=19.0.0",
