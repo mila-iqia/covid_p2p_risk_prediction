@@ -1,7 +1,6 @@
-torch
-unittest
+git+git://github.com/nasimrahaman/ctt@master
+joblib
 numpy
-addict
-git+git://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction
-zipfile36
-wandb
+pyzmq
+torch
+tqdm
