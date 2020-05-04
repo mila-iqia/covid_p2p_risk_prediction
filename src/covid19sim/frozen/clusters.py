@@ -16,11 +16,11 @@ class Clusters:
         self.clusters = defaultdict(list)
         self.clusters_by_day = defaultdict(dict)
 
-    def add_messages(self, messages, current_day):
+    def add_messages(self, messages):
         """ This function clusters new messages by scoring them against old messages in a sort of naive nearest neighbors approach"""
         for message in messages:
             m_dec = decode_message(message)
-            best_cluster = self.score_matches(m_dec, current_day)
+            best_cluster = self.score_matches(m_dec, m_dec.day)
             self.num_messages += 1
             self.clusters[best_cluster].append(message)
             self.add_to_clusters_by_day(best_cluster, m_dec.day, message)

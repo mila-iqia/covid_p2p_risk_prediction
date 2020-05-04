@@ -263,7 +263,17 @@ def proc_human(params, inference_engine=None, mp_backend=None, mp_threads=0):
 
     # Cluster Messages
     human = params["human"]
-    human["clusters"].add_messages(human["messages"], params["current_day"] - 1)
+
+    # USEFUL DEBUGGING STOOF
+    # print(human['name'])
+    # print(f"clusters: {[set(v) for k, v in human['clusters'].clusters.items()]}")
+    # print(f"messages: {set(human['messages'])}")
+    # print(f"update_messages: {set(human['update_messages'])}")
+    # print(f"clusters: {human['clusters'].clusters}")
+    # print(f"messages: {human['messages']}")
+    # print(f"update_messages: {human['update_messages']}")
+
+    human["clusters"].add_messages(human["messages"])
     human["messages"] = []
     human["clusters"].update_records(human["update_messages"])
     human["update_messages"] = []
