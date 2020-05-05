@@ -79,6 +79,7 @@ class ContactDataset(Dataset):
         clip_history_days=False,
         bit_encoded_messages=True,
         transforms=None,
+        pre_transforms=None,
         preload=False,
     ):
         """
@@ -99,8 +100,11 @@ class ContactDataset(Dataset):
         bit_encoded_messages : bool
             Whether messages are encoded as a bit vector (True) or floats
             between 0 and 1 (False).
-        transforms: callable
+        transforms : callable
             Transforms to apply before sending sample to the collator.
+        pre_transforms : callable
+            Transform that applies directly from to the data that is read
+            from file, and before any further processing
         preload : bool
             If path points to a zipfile, load the entire file to RAM (as a
             BytesIO object).
@@ -114,6 +118,7 @@ class ContactDataset(Dataset):
         self.clip_history_days = clip_history_days
         self.bit_encoded_messages = bit_encoded_messages
         self.transforms = transforms
+        self.pre_transforms = pre_transforms
         self.preload = preload
         # Prepwork
         self._preloaded = None
@@ -267,6 +272,9 @@ class ContactDataset(Dataset):
         day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
+        # Apply any pre-transforms
+        if self.pre_transforms is not None:
+            human_day_info = self.pre_transforms(human_day_info, human_idx, day_idx)
         # -------- Encounters --------
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.

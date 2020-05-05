@@ -4,6 +4,11 @@ from torchvision.transforms import Compose
 from addict import Dict
 
 
+# ------------------------------
+# ------- Infrastructure -------
+# ------------------------------
+
+
 class Transform(object):
     def apply(self, input_dict: Dict) -> Dict:
         raise NotImplementedError
@@ -11,6 +16,36 @@ class Transform(object):
     def __call__(self, input_dict: Dict) -> Dict:
         input_dict = Dict(input_dict)
         return self.apply(input_dict)
+
+
+class PreTransform(object):
+    def apply(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ) -> dict:
+        raise NotImplementedError
+
+    def __call__(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ):
+        human_day_info = dict(human_day_info)
+        return self.apply(human_day_info, human_idx, day_idx)
+
+
+class ComposePreTransforms(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ):
+        for transform in self.transforms:
+            human_day_info = transform(human_day_info, human_idx, day_idx)
+        return human_day_info
+
+
+# --------------------------
+# ------- Transforms -------
+# --------------------------
 
 
 class QuantizedGaussianMessageNoise(Transform):
@@ -54,10 +89,29 @@ class FractionalEncounterDurationNoise(Transform):
         return input_dict
 
 
+# ------------------------------
+# ------- Pre-Transforms -------
+# ------------------------------
+
+
+# ------------------------------
+# ------- Config Parsing -------
+# ------------------------------
+
+
 def get_transforms(config):
     transforms = []
     for name in config.get("names", []):
         cls = globals()[name]
-        kwargs = config["kwargs"].get(name, "{}")
+        kwargs = config["kwargs"].get(name, {})
         transforms.append(cls(**kwargs))
     return Compose(transforms)
+
+
+def get_pre_transforms(config):
+    transforms = []
+    for name in config.get("names", []):
+        cls = globals()[name]
+        kwargs = config["kwargs"].get(name, {})
+        transforms.append(cls(**kwargs))
+    return ComposePreTransforms(transforms)
