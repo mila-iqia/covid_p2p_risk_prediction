@@ -14,7 +14,9 @@ class InferenceEngine(BaseExperiment):
 
     def _build(self):
         self.preprocessor = ContactPreprocessor(
-            relative_days=self.get("data/loader_kwargs/relative_days", True)
+            relative_days=self.get("data/loader_kwargs/relative_days", True),
+            clip_history_days=self.get("data/loader_kwargs/clip_history_days", False),
+            bit_encoded_messages=self.get("data/loader_kwargs/bit_encoded_messages", True)
         )
         self.model: torch.nn.Module = ContactTracingTransformer(
             **self.get("model/kwargs", {})
