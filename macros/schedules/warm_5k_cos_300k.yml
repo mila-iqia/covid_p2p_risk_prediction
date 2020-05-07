@@ -1,0 +1,8 @@
+optim:
+  __speedrun__: purge
+  kwargs:
+    eta_max: 0.0008
+    eta_min: 8.0e-06
+    num_steps: 300000
+    num_warmup_steps: 5000
+  name: WarmCosineAdam
