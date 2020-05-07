@@ -5,7 +5,7 @@ class Tests(unittest.TestCase):
 
     DATASET_PATH = (
         ZIP_PATH
-    ) = "../data/sim_v2_people-1000_days-60_init-0.01_seed-0_20200430-012202-output.zip"
+    ) = "../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200506-223009-output.zip"
     NUM_KEYS_IN_BATCH = 15
 
     def test_model_runs(self):
@@ -180,11 +180,11 @@ class Tests(unittest.TestCase):
             )
 
         dataset = ContactDataset(path)
-        sample = dataset.get(890, 3)
+        sample = dataset.get(890, 3, 1)
         validate(sample)
 
         dataset = ContactDataset(path, bit_encoded_messages=False)
-        sample = dataset.get(890, 3)
+        sample = dataset.get(890, 3, 1)
         validate(sample)
 
     def test_tflite_model_conversion(self):

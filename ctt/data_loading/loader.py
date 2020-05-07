@@ -126,54 +126,50 @@ class ContactDataset(Dataset):
         self._set_input_fields_to_slice_mapping()
 
     def _read_data(self):
-        if os.path.isdir(self.path):
-            # Case 1: Extracted files
-            files = glob.glob(os.path.join(self.path, "*"))
-            day_idxs, human_idxs = zip(
-                *[
-                    [
-                        int(component)
-                        for component in os.path.basename(file).strip(".pkl").split("-")
-                    ]
-                    for file in files
-                ]
-            )
-        elif self.path.endswith(".zip"):
-            # Case 2: Zipfiles
-            if self.preload:
-                with open(self.path, "rb") as f:
-                    buffer = io.BytesIO(f.read())
-                buffer.seek(0)
-                self._preloaded = zipfile.ZipFile(buffer)
-                files = self._preloaded.namelist()
-            else:
-                with zipfile.ZipFile(self.path) as zf:
-                    files = zipfile.ZipFile.namelist(zf)
-
-            def extract_components(file):
-                components = file[:-4].split("-")
-                if len(components) == 3:
-                    # This can happen for a file-name like -1-100.pkl, which means
-                    # that the first idx is negative.
-                    return [-int(components[1]), int(components[2])]
-                else:
-                    return [int(c) for c in components]
-
-            day_idxs, human_idxs = zip(
-                *[
-                    extract_components(file)
-                    for file in files
-                    if (file.endswith(".pkl") and not file.startswith("__MACOSX"))
-                ]
-            )
+        assert self.path.endswith(".zip")
+        if self.preload:
+            with open(self.path, "rb") as f:
+                buffer = io.BytesIO(f.read())
+            buffer.seek(0)
+            self._preloaded = zipfile.ZipFile(buffer)
+            files = self._preloaded.namelist()
         else:
-            raise ValueError
+            with zipfile.ZipFile(self.path) as zf:
+                files = zipfile.ZipFile.namelist(zf)
+
+        def extract_components(file):
+            components = file[:-8].split("-")
+            components.remove("daily_human")
+            if len(components) == 4:
+                # This can happen for a file-name like -1-100.pkl, which means
+                # that the first idx is negative.
+                return [-int(components[1]), int(components[2])]
+            else:
+                assert len(components) == 3
+                return [int(c) for c in components[:2]]
+
+        day_idxs, human_idxs = zip(
+            *[
+                extract_components(file)
+                for file in files
+                if (file.endswith(".pkl") and not file.startswith("__MACOSX"))
+            ]
+        )
+
+        # Set list of files
+        self._files = files
         # Set the offsets as required
         self._day_idx_offset = min(day_idxs)
         self._human_idx_offset = min(human_idxs)
         # Compute numbers of days and humans
         self._num_days = max(day_idxs) - self._day_idx_offset + 1
         self._num_humans = max(human_idxs) - self._human_idx_offset + 1
+        # Compute number of slots / day
+        _find_slots = lambda x: x.startswith(
+            f"{self._day_idx_offset}-{self._human_idx_offset}-daily_human"
+        )
+        self._num_slots = len(list(filter(_find_slots, files)))
+        assert self._num_slots > 0
 
     def _set_input_fields_to_slice_mapping(self):
         self._input_fields_to_slice_mapping = deepcopy(
@@ -189,34 +185,42 @@ class ContactDataset(Dataset):
     def num_days(self):
         return self._num_days
 
-    def __len__(self):
-        return self.num_humans * self.num_days
+    @property
+    def num_slots(self):
+        return self._num_slots
 
-    def read(self, human_idx, day_idx):
-        file_name = (
-            f"{day_idx + self._day_idx_offset}-"
-            f"{human_idx + self._human_idx_offset}.pkl"
+    def _find_file(self, human_idx, day_idx, slot_idx):
+        assert human_idx < self.num_humans
+        assert day_idx < self.num_days
+        assert slot_idx < self.num_slots
+        _find_slots = lambda x: x.startswith(
+            f"{day_idx + self._day_idx_offset}-{human_idx + self._human_idx_offset}-daily_human"
         )
-        if os.path.isdir(self.path):
-            # We're working with a dir, so we read and return
-            file_name = os.path.join(self.path, file_name)
-            with open(file_name, "rb") as f:
-                return pickle.load(f)
-        elif self.path.endswith(".zip"):
-            # We're working with a zipfile
-            # Check if we have the content preload to RAM
-            if self._preloaded is not None:
-                self._preloaded: zipfile.ZipFile
-                with self._preloaded.open(file_name, "r") as f:
-                    return pickle.load(f)
-            else:
-                # Read zip archive from path, and then read content
-                # from archive
-                with zipfile.ZipFile(self.path) as zf:
-                    with zf.open(file_name, "r") as f:
-                        return pickle.load(f)
+        all_slots = sorted(list(filter(_find_slots, self._files)))
+        return all_slots[slot_idx]
 
-    def get(self, human_idx: int, day_idx: int, human_day_info: dict = None) -> Dict:
+    def __len__(self):
+        return self.num_humans * self.num_days * self._num_slots
+
+    def read(self, human_idx, day_idx, slot_idx):
+        file_name = self._find_file(human_idx, day_idx, slot_idx)
+        assert self.path.endswith(".zip")
+        # We're working with a zipfile
+        # Check if we have the content preload to RAM
+        if self._preloaded is not None:
+            self._preloaded: zipfile.ZipFile
+            with self._preloaded.open(file_name, "r") as f:
+                return pickle.load(f)
+        else:
+            # Read zip archive from path, and then read content
+            # from archive
+            with zipfile.ZipFile(self.path) as zf:
+                with zf.open(file_name, "r") as f:
+                    return pickle.load(f)
+
+    def get(
+        self, human_idx: int, day_idx: int, slot_idx: int, human_day_info: dict = None,
+    ) -> Dict:
         """
         Parameters
         ----------
@@ -224,6 +228,8 @@ class ContactDataset(Dataset):
             Index specifying the human
         day_idx : int
             Index of the day
+        slot_idx : int
+            Index of the update slot of day
         human_day_info : dict
             If provided, use this dictionary instead of the content of the
             pickle file (which is read from file).
@@ -267,8 +273,7 @@ class ContactDataset(Dataset):
                     of shape (M, 1).
         """
         if human_day_info is None:
-            human_day_info = self.read(human_idx, day_idx)
-        # assert day_idx + self._day_idx_offset == human_day_info["current_day"]
+            human_day_info = self.read(human_idx, day_idx, slot_idx)
         day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
@@ -444,12 +449,18 @@ class ContactDataset(Dataset):
             ).astype("float32")
 
     def __getitem__(self, item):
-        human_idx, day_idx = np.unravel_index(item, (self.num_humans, self.num_days))
-        _requested_human_idx, _requested_day_idx = human_idx, day_idx
+        human_idx, day_idx, slot_idx = np.unravel_index(
+            item, (self.num_humans, self.num_days, self.num_slots)
+        )
+        _requested_human_idx, _requested_day_idx, _requested_slot_idx = (
+            human_idx,
+            day_idx,
+            slot_idx,
+        )
         num_fetch_attempts = 0
         while True:
             try:
-                return self.get(human_idx, day_idx)
+                return self.get(human_idx, day_idx, slot_idx)
             except InvalidSetSize:
                 # We tried 5 fetch attempts for this human, but none of them worked
                 # meaning this human is borked. So we try another one.
@@ -568,7 +579,7 @@ class ContactPreprocessor(ContactDataset):
 
     def preprocess(self, human_day_info, as_batch=True):
         # noinspection PyTypeChecker
-        sample = self.get(None, None, human_day_info=human_day_info)
+        sample = self.get(None, None, None, human_day_info=human_day_info)
         if as_batch:
             sample = self.collate_fn([sample])
         return sample
