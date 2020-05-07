@@ -187,6 +187,10 @@ class Tests(unittest.TestCase):
         sample = dataset.get(890, 3, 1)
         validate(sample)
 
+        dataset = ContactDataset(path, bit_encoded_messages=False)
+        sample = dataset[0]
+        validate(sample)
+
     def test_tflite_model_conversion(self):
         from ctt.models.transformer import ContactTracingTransformer
         from ctt.conversion.export_to_tflite import convert_pytorch_model_fixed_messages

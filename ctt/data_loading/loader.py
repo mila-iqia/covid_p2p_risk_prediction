@@ -214,12 +214,24 @@ class ContactDataset(Dataset):
                 )
                 return random.choice(all_slots)
 
-    def __len__(self):
-        return self.num_humans * self.num_days * self._num_slots
+    def _parse_file(self, file_name):
+        components = file_name[:-8].split("-")
+        # components[2] is always "daily-human", if you're wondering
+        day_idx, human_idx, slot_idx = (
+            int(components[0]),
+            int(components[1]),
+            int(components[3]),
+        )
+        return day_idx, human_idx, slot_idx
 
-    def read(self, human_idx, day_idx, slot_idx):
-        file_name = self._find_file(human_idx, day_idx, slot_idx)
-        assert self.path.endswith(".zip")
+    def __len__(self):
+        return len(self._files)
+
+    def read(self, human_idx=None, day_idx=None, slot_idx=None, file_name=None):
+        if file_name is None:
+            assert None not in [human_idx, day_idx, slot_idx]
+            file_name = self._find_file(human_idx, day_idx, slot_idx)
+        assert self.path.endswith(".zip"), "Only zipfiles supported"
         # We're working with a zipfile
         # Check if we have the content preload to RAM
         if self._preloaded is not None:
@@ -234,17 +246,25 @@ class ContactDataset(Dataset):
                     return pickle.load(f)
 
     def get(
-        self, human_idx: int, day_idx: int, slot_idx: int, human_day_info: dict = None,
+        self,
+        human_idx: int = None,
+        day_idx: int = None,
+        slot_idx: int = None,
+        file_name: str = None,
+        human_day_info: dict = None,
     ) -> Dict:
         """
         Parameters
         ----------
         human_idx : int
-            Index specifying the human
+            Index specifying the human. Optional if file_name is provided.
         day_idx : int
-            Index of the day
+            Index of the day. Optional if file_name is provided.
         slot_idx : int
-            Index of the update slot of day
+            Index of the update slot of day. Optional if file_name is provided.
+        file_name : str
+            Name of the file to load from. Optional if human_idx, day_idx
+            and slot_idx is provided, but overrides the latter if provided.
         human_day_info : dict
             If provided, use this dictionary instead of the content of the
             pickle file (which is read from file).
@@ -288,7 +308,7 @@ class ContactDataset(Dataset):
                     of shape (M, 1).
         """
         if human_day_info is None:
-            human_day_info = self.read(human_idx, day_idx, slot_idx)
+            human_day_info = self.read(human_idx, day_idx, slot_idx, file_name)
         day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
@@ -464,29 +484,11 @@ class ContactDataset(Dataset):
             ).astype("float32")
 
     def __getitem__(self, item):
-        human_idx, day_idx, slot_idx = np.unravel_index(
-            item, (self.num_humans, self.num_days, self.num_slots)
+        file_name = self._files[item]
+        day_idx, human_idx, slot_idx = self._parse_file(file_name)
+        return self.get(
+            human_idx=human_idx, day_idx=day_idx, slot_idx=slot_idx, file_name=file_name
         )
-        _requested_human_idx, _requested_day_idx, _requested_slot_idx = (
-            human_idx,
-            day_idx,
-            slot_idx,
-        )
-        num_fetch_attempts = 0
-        while True:
-            try:
-                return self.get(human_idx, day_idx, slot_idx)
-            except InvalidSetSize:
-                # We tried 5 fetch attempts for this human, but none of them worked
-                # meaning this human is borked. So we try another one.
-                if num_fetch_attempts > 5:
-                    human_idx = (human_idx + 1) % self.num_humans
-                    # Reset counters and day
-                    day_idx = _requested_day_idx
-                    num_fetch_attempts = 0
-                # Try another day
-                day_idx = (day_idx + 1) % self.num_days
-                num_fetch_attempts += 1
 
     @classmethod
     def collate_fn(cls, batch):
