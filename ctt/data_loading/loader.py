@@ -484,11 +484,19 @@ class ContactDataset(Dataset):
             ).astype("float32")
 
     def __getitem__(self, item):
-        file_name = self._files[item]
-        day_idx, human_idx, slot_idx = self._parse_file(file_name)
-        return self.get(
-            human_idx=human_idx, day_idx=day_idx, slot_idx=slot_idx, file_name=file_name
-        )
+        while True:
+            try:
+                file_name = self._files[item]
+                day_idx, human_idx, slot_idx = self._parse_file(file_name)
+                return self.get(
+                    human_idx=human_idx,
+                    day_idx=day_idx,
+                    slot_idx=slot_idx,
+                    file_name=file_name,
+                )
+            except InvalidSetSize:
+                item = (item + 1) % len(self)
+                continue
 
     @classmethod
     def collate_fn(cls, batch):
