@@ -6,6 +6,8 @@ from typing import Union
 import zipfile
 import io
 from copy import deepcopy
+import warnings
+import random
 
 import numpy as np
 import torch
@@ -197,7 +199,20 @@ class ContactDataset(Dataset):
             f"{day_idx + self._day_idx_offset}-{human_idx + self._human_idx_offset}-daily_human"
         )
         all_slots = sorted(list(filter(_find_slots, self._files)))
-        return all_slots[slot_idx]
+        try:
+            return all_slots[slot_idx]
+        except IndexError:
+            if len(all_slots) == 0:
+                raise ValueError(
+                    f"No slots found for human {human_idx}, day {day_idx}!"
+                )
+            else:
+                warnings.warn(
+                    f"Tried to access slot {slot_idx} for human {human_idx} "
+                    f"and day {day_idx}, but only {len(all_slots)} slots are "
+                    f"available -- using a random slot."
+                )
+                return random.choice(all_slots)
 
     def __len__(self):
         return self.num_humans * self.num_days * self._num_slots
