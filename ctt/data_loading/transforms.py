@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 from torchvision.transforms import Compose
 
@@ -92,6 +94,26 @@ class FractionalEncounterDurationNoise(Transform):
 # ------------------------------
 # ------- Pre-Transforms -------
 # ------------------------------
+
+
+class ClusteringNoise(PreTransform):
+    def __init__(self, expansion_factor=1.5):
+        pass
+
+    def apply(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ) -> dict:
+        encounter_info = human_day_info["observed"]["candidate_encounters"]
+        encounter_is_contagion = human_day_info["unobserved"]["exposure_encounter"]
+        # The plan is to expand the encounters.
+        # For starters, we sample which encounters we want to replicate.
+        replication_mask = np.random.binomial(
+            n=1, p=0.5, size=(encounter_info.shape[0],)
+        ).astype("bool")
+        encounter_info_originals = encounter_info[replication_mask, :]
+        encounter_is_contagion_originals = encounter_is_contagion[replication_mask, :]
+        # TODO Continue
+        raise NotImplementedError
 
 
 # ------------------------------
