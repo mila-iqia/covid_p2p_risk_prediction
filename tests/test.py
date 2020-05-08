@@ -6,6 +6,7 @@ class Tests(unittest.TestCase):
     DATASET_PATH = (
         ZIP_PATH
     ) = "../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200506-223009-output.zip"
+    EXP_DIR = "/Users/nrahaman/Python/ctt/tmp/CTT-SHIPMENT-0"
     NUM_KEYS_IN_BATCH = 15
 
     def test_model_runs(self):
@@ -205,6 +206,26 @@ class Tests(unittest.TestCase):
                 model, nb_messages, working_directory="./tmp/test_dir/",
                 dataset_path=self.DATASET_PATH)
             self.assertLess(max_diff, 0.005)
+
+    def test_inference_engine_determinism(self):
+        from ctt.data_loading.loader import ContactDataset
+        from ctt.inference.infer import InferenceEngine
+        import numpy as np
+
+        path = self.DATASET_PATH
+        dataset = ContactDataset(path)
+        num_idxs = 10
+        for idx in range(num_idxs):
+            filename = dataset._files[idx]
+            hdi = dataset.read(file_name=filename)
+            engine = InferenceEngine(self.EXP_DIR)
+            output_1 = engine.infer(hdi)
+            output_2 = engine.infer(hdi)
+            for key in output_1:
+                self.assert_(np.allclose(output_1[key], output_2[key]))
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
