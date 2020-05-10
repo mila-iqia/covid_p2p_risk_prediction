@@ -14,5 +14,5 @@ parameters:
     values: [100000, 150000, 200000, 300000, 400000]
   optim__kwargs__num_warmup_steps:
     distribution: categorical
-    values: [100000, 150000, 200000, 300000, 400000]
+    values: [1000, 2500, 5000, 10000]
 
