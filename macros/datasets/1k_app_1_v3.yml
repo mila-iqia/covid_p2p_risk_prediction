@@ -1,0 +1,14 @@
+data:
+  paths:
+    train:
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-1_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-2_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-3_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-4_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-5_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-6_20200509-182246-output.zip"
+    validate:
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-7_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-8_20200509-182246-output.zip"
+      - "./data/1k_app_1_v2/sim_v2_people-1000_days-30_init-0.003_seed-9_20200509-182246-output.zip"
