@@ -4,7 +4,7 @@ import persistqueue
 import uuid
 
 import torch
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     # This is to trick pycharm in to giving me autocomplete for the mixin. ;)
@@ -40,7 +40,7 @@ class SimInterfaceMixin(_SimInterfaceMixin):
         return directory
 
     @property
-    def evaluation_checkpoint_directory(self):
+    def evaluation_checkpoint_directory(self) -> str:
         directory = os.path.join(self.checkpoint_directory, "Evaluation")
         if not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
@@ -87,7 +87,7 @@ class SimInterfaceMixin(_SimInterfaceMixin):
         self.outgoing_queue.put(payload)
         return self
 
-    def receive_metrics(self):
+    def receive_metrics(self) -> List[dict]:
         metrics = []
         while True:
             try:
