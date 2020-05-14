@@ -180,6 +180,7 @@ class SimulationMetrics(object):
 
     def compute_metrics(
         self,
+        city=None,
         encounter_logs=None,
         logs=None,
         simulator_log_directory=None,
@@ -187,12 +188,15 @@ class SimulationMetrics(object):
         simulation_stop=None,
         return_everything=False,
     ):
-        # Read in the logs
-        encounter_logs = (
-            encounter_logs
-            if encounter_logs is not None
-            else self.get_encounter_logs(logs, simulator_log_directory)
-        )
+        if city is None:
+            # Read in the logs
+            encounter_logs = (
+                encounter_logs
+                if encounter_logs is not None
+                else self.get_encounter_logs(logs, simulator_log_directory)
+            )
+        else:
+            encounter_logs = self.get_encounter_logs(logs=city.events)
         # Build and filter the graph such that the encounters lie between sim start
         # and stop.
         simulation_start = (

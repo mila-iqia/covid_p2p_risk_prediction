@@ -1,7 +1,9 @@
 import os
 import time
 import persistqueue
+import uuid
 
+import torch
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,10 +19,10 @@ class _SimInterfaceMixin(Base):
     def start_sim_server(self):
         pass
 
-    def send_weights_to_sim_server(self):
+    def send_weights(self):
         return self
 
-    def receive_metrics_from_sim_server(self):
+    def receive_metrics(self):
         return []
 
 
@@ -31,36 +33,65 @@ class DummySimInterfaceMixin(_SimInterfaceMixin):
 class SimInterfaceMixin(_SimInterfaceMixin):
     @property
     def queue_directory(self) -> str:
-        return os.path.join(self.experiment_directory, "Logs", "SimQ")
+        directory = os.path.join(self.experiment_directory, "Logs", "SimQ")
+        # Make a directory if it doesn't already exist
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        return directory
 
     @property
-    def queue(self) -> persistqueue.SQLiteQueue:
-        if not hasattr(self, "_sim_interface_queue"):
+    def evaluation_checkpoint_directory(self):
+        directory = os.path.join(self.checkpoint_directory, "Evaluation")
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        return directory
+
+    @property
+    def outgoing_queue(self) -> persistqueue.SQLiteQueue:
+        if not hasattr(self, "_sim_interface_out_queue"):
             setattr(
                 self,
-                "_sim_interface_queue",
+                "_sim_interface_out_queue",
                 persistqueue.SQLiteQueue(
-                    self.queue_directory, name="simq", auto_commit=True
+                    self.queue_directory, name="simq_out", auto_commit=True
                 ),
             )
-        return getattr(self, "_sim_interface_queue")
+        return getattr(self, "_sim_interface_out_queue")
 
-    def send_weights_to_sim_server(self):
+    @property
+    def incoming_queue(self) -> persistqueue.SQLiteQueue:
+        if not hasattr(self, "_sim_interface_in_queue"):
+            setattr(
+                self,
+                "_sim_interface_in_queue",
+                persistqueue.SQLiteQueue(
+                    self.queue_directory, name="simq_in", auto_commit=True
+                ),
+            )
+        return getattr(self, "_sim_interface_in_queue")
+
+    def send_weights(self):
+        # Dump weights
+        weight_path = os.path.join(
+            self.evaluation_checkpoint_directory, f"{uuid.uuid4().hex}.ckpt"
+        )
+        torch.save(self.model.state_dict(), weight_path)
+        # Make payload to dump to the queue
         payload = dict(
             epoch=self.epoch,
             step=self.step,
             experiment_directory=self.experiment_directory,
             time=time.time(),
-            weights=self.model.state_dict(),
+            weight_path=weight_path,
         )
-        self.queue.put(payload)
+        self.outgoing_queue.put(payload)
         return self
 
-    def receive_metrics_from_sim_server(self):
+    def receive_metrics(self):
         metrics = []
         while True:
             try:
-                metrics.append(self.queue.get(block=False))
+                metrics.append(self.incoming_queue.get(block=False))
             except persistqueue.Empty:
                 break
         return metrics
