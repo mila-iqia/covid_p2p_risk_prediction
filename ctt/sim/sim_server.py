@@ -115,7 +115,6 @@ def launch(args: argparse.Namespace):
     """
     This is the main function that is called inside the slurm/HTCondor job.
     """
-
     # Read in a job from the queue
     queue_directory = su.get_queue_directory(args.experiment_directory)
     job = get_job(queue_directory=queue_directory, timeout=args.read_timeout)
@@ -129,13 +128,15 @@ def launch(args: argparse.Namespace):
         weight_path=job["weight_path"],
         num_inference_workers=args.num_inference_workers,
     ):
-        # Run the sim on multiple jobs if required
+        # Run the sim
         if isinstance(job["simulation_kwargs"], list):
+            # If we're here, it means we want to run multiple sims with different
+            # parameters simultaneously (on multiple workers)
             max_num_workers = args.max_num_sim_workers or len(job["simulation_kwargs"])
             with ProcessPoolExecutor(max_workers=max_num_workers) as executor:
                 results = list(executor.map(run_simulation, job["simulation_kwargs"]))
         else:
-            # Run single process
+            # Run a single sim on a single process
             results = run_simulation(job["simulation_kwargs"])
     # Return the results which will be read in by the training loop
     return_results(queue_directory, job, results)
