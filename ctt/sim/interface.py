@@ -2,6 +2,7 @@ import os
 import time
 import persistqueue
 import uuid
+import shutil
 
 import torch
 from typing import TYPE_CHECKING, List
@@ -100,4 +101,11 @@ class SimInterfaceMixin(_SimInterfaceMixin):
                 metrics.append(self.incoming_queue.get(block=False))
             except persistqueue.Empty:
                 break
+        return self.clear_weights(metrics)
+
+    def clear_weights(self, metrics):
+        for metric in metrics:
+            weight_path = metric["weight_path"]
+            if os.path.exists(weight_path):
+                shutil.rmtree(weight_path)
         return metrics

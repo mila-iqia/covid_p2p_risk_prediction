@@ -4,6 +4,7 @@ import subprocess
 import persistqueue
 from contextlib import contextmanager
 
+from concurrent.futures import ProcessPoolExecutor
 from typing import Union
 
 import ctt.sim.utils as su
@@ -30,17 +31,17 @@ def launch_inference_server(experiment_directory: str, weight_path: str):
     server_process.terminate()
 
 
-def run_simulation(**simulation_kwargs) -> dict:
+def run_simulation(simulation_kwargs: dict) -> dict:
     """
     This function wraps all covid19sim business and returns a dict of metrics.
     Assumes that the inference server is running.
     """
-    pass
+    from covid19sim.run import run_simu
+    from ctt.sim.metrics import SimulationMetrics
 
-
-def evaluate_metric(logs):
-    """Evaluate the metric given the logs."""
-    pass
+    _, _, city = run_simu(return_city=True, **simulation_kwargs["sim"])
+    metrics = SimulationMetrics(**simulation_kwargs["metrics"])(city=city)
+    return metrics
 
 
 # ----------- Interface and IO -----------
@@ -48,8 +49,27 @@ def evaluate_metric(logs):
 
 def parse_args() -> argparse.Namespace:
     parsey = argparse.ArgumentParser()
-    parsey.add_argument("-e", "--experiment-directory", type=str, required=True)
-    parsey.add_argument("-t", "--read-timeout", type=int, default=300)
+    parsey.add_argument(
+        "-e",
+        "--experiment-directory",
+        type=str,
+        required=True,
+        help="Experiment directory used to build the model.",
+    )
+    parsey.add_argument(
+        "-t",
+        "--read-timeout",
+        type=int,
+        default=300,
+        help="How long to wait before giving up on the out-going queue.",
+    )
+    parsey.add_argument(
+        "-w",
+        "--max-num-workers",
+        type=int,
+        default=4,
+        help="Max number of workers to spin up. Defaults to the number of jobs.",
+    )
     args = parsey.parse_args()
     return args
 
@@ -70,7 +90,7 @@ def return_results(queue_directory: str, job: dict, results: dict):
     """
     Returns the result of the simulation to the incoming-queue in `queue_directory`.
     """
-    payload = {**job, **results}
+    payload = {**job, "results": results}
     queue = persistqueue.SQLiteQueue(
         path=queue_directory, name=su.get_incoming_queue_name(), auto_commit=True
     )
@@ -94,7 +114,13 @@ def launch(args: argparse.Namespace):
         experiment_directory=job["experiment_directory"], weight_path=job["weight_path"]
     ):
         # Run the sim
-        results = run_simulation(**job["simulation_kwargs"])
+        if isinstance(job["simulation_kwargs"], list):
+            max_num_workers = args.max_num_workers or len(job["simulation_kwargs"])
+            with ProcessPoolExecutor(max_workers=max_num_workers) as executor:
+                results = list(executor.map(run_simulation, job["simulation_kwargs"]))
+        else:
+            # Run single process
+            results = run_simulation(job["simulation_kwargs"])
     # Return the results which will be read in by the training loop
     return_results(queue_directory, job, results)
 
