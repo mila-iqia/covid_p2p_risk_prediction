@@ -7,24 +7,30 @@ import torch
 
 
 class InferenceEngine(BaseExperiment):
-    def __init__(self, experiment_directory):
+    def __init__(self, experiment_directory, weight_path=None):
         super(InferenceEngine, self).__init__(experiment_directory=experiment_directory)
         self.record_args().read_config_file()
-        self._build()
+        self._build(weight_path=weight_path)
 
-    def _build(self):
+    def _build(self, weight_path=None):
         self.preprocessor = ContactPreprocessor(
             relative_days=self.get("data/loader_kwargs/relative_days", True),
             clip_history_days=self.get("data/loader_kwargs/clip_history_days", False),
-            bit_encoded_messages=self.get("data/loader_kwargs/bit_encoded_messages", True)
+            bit_encoded_messages=self.get(
+                "data/loader_kwargs/bit_encoded_messages", True
+            ),
         )
         self.model: torch.nn.Module = ContactTracingTransformer(
             **self.get("model/kwargs", {})
         )
-        self.load()
+        self.load(weight_path=weight_path)
 
-    def load(self):
-        path = os.path.join(self.checkpoint_directory, "best.ckpt")
+    def load(self, weight_path=None):
+        path = (
+            os.path.join(self.checkpoint_directory, "best.ckpt")
+            if weight_path is None
+            else weight_path
+        )
         assert os.path.exists(path)
         state = torch.load(path, map_location=torch.device("cpu"))
         self.model.load_state_dict(state["model"])
