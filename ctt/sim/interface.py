@@ -5,6 +5,7 @@ import uuid
 
 import torch
 from typing import TYPE_CHECKING, List
+import ctt.sim.utils as su
 
 if TYPE_CHECKING:
     # This is to trick pycharm in to giving me autocomplete for the mixin. ;)
@@ -33,7 +34,7 @@ class DummySimInterfaceMixin(_SimInterfaceMixin):
 class SimInterfaceMixin(_SimInterfaceMixin):
     @property
     def queue_directory(self) -> str:
-        directory = os.path.join(self.experiment_directory, "Logs", "SimQ")
+        directory = su.get_queue_directory(self.experiment_directory)
         # Make a directory if it doesn't already exist
         if not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
@@ -41,7 +42,7 @@ class SimInterfaceMixin(_SimInterfaceMixin):
 
     @property
     def evaluation_checkpoint_directory(self) -> str:
-        directory = os.path.join(self.checkpoint_directory, "Evaluation")
+        directory = su.get_evaluation_checkpoint_directory(self.experiment_directory)
         if not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
         return directory
@@ -53,7 +54,9 @@ class SimInterfaceMixin(_SimInterfaceMixin):
                 self,
                 "_sim_interface_out_queue",
                 persistqueue.SQLiteQueue(
-                    self.queue_directory, name="simq_out", auto_commit=True
+                    self.queue_directory,
+                    name=su.get_outgoing_queue_name(),
+                    auto_commit=True,
                 ),
             )
         return getattr(self, "_sim_interface_out_queue")
@@ -65,7 +68,9 @@ class SimInterfaceMixin(_SimInterfaceMixin):
                 self,
                 "_sim_interface_in_queue",
                 persistqueue.SQLiteQueue(
-                    self.queue_directory, name="simq_in", auto_commit=True
+                    self.queue_directory,
+                    name=su.get_incoming_queue_name(),
+                    auto_commit=True,
                 ),
             )
         return getattr(self, "_sim_interface_in_queue")
@@ -83,6 +88,7 @@ class SimInterfaceMixin(_SimInterfaceMixin):
             experiment_directory=self.experiment_directory,
             time=time.time(),
             weight_path=weight_path,
+            simulation_kwargs=self.get("sim/kwargs", {})
         )
         self.outgoing_queue.put(payload)
         return self
