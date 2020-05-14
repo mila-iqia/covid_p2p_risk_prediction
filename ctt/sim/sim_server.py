@@ -14,16 +14,20 @@ import ctt.sim.utils as su
 
 
 @contextmanager
-def launch_inference_server(experiment_directory: str, weight_path: str):
+def launch_inference_server(
+    experiment_directory: str, weight_path: str, num_inference_workers: int = 4
+):
     server_process = subprocess.Popen(
         [
             sys.executable,
             "-m",
             "covid19sim.server_bootstrap",
-            "-e",
+            "--exp-path",
             experiment_directory,
-            "-w",
+            "--weight-path",
             weight_path,
+            "--workers",
+            num_inference_workers,
         ]
     )
     yield server_process
@@ -64,11 +68,21 @@ def parse_args() -> argparse.Namespace:
         help="How long to wait before giving up on the out-going queue.",
     )
     parsey.add_argument(
-        "-w",
-        "--max-num-workers",
+        "-s",
+        "--max-num-sim-workers",
         type=int,
         default=4,
-        help="Max number of workers to spin up. Defaults to the number of jobs.",
+        help=(
+            "Max number of workers to spin up for the spin. "
+            "Defaults to the number of simulation parameters sent."
+        ),
+    )
+    parsey.add_argument(
+        "-i",
+        "--num-inference-workers",
+        type=int,
+        default=4,
+        help="Number of inference processes. Defaults to 4.",
     )
     args = parsey.parse_args()
     return args
@@ -111,11 +125,13 @@ def launch(args: argparse.Namespace):
         return
     # Launch the inference server and run the job
     with launch_inference_server(
-        experiment_directory=job["experiment_directory"], weight_path=job["weight_path"]
+        experiment_directory=job["experiment_directory"],
+        weight_path=job["weight_path"],
+        num_inference_workers=args.num_inference_workers,
     ):
-        # Run the sim
+        # Run the sim on multiple jobs if required
         if isinstance(job["simulation_kwargs"], list):
-            max_num_workers = args.max_num_workers or len(job["simulation_kwargs"])
+            max_num_workers = args.max_num_sim_workers or len(job["simulation_kwargs"])
             with ProcessPoolExecutor(max_workers=max_num_workers) as executor:
                 results = list(executor.map(run_simulation, job["simulation_kwargs"]))
         else:
