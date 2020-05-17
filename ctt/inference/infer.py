@@ -4,6 +4,7 @@ from speedrun import BaseExperiment
 from ctt.data_loading.loader import ContactPreprocessor
 from ctt.models.transformer import ContactTracingTransformer
 import torch
+import torch.jit
 
 
 class InferenceEngine(BaseExperiment):
@@ -20,10 +21,7 @@ class InferenceEngine(BaseExperiment):
                 "data/loader_kwargs/bit_encoded_messages", True
             ),
         )
-        self.model: torch.nn.Module = ContactTracingTransformer(
-            **self.get("model/kwargs", {})
-        )
-        self.load(weight_path=weight_path)
+        self.model = self.load(weight_path=weight_path)
 
     def load(self, weight_path=None):
         path = (
@@ -31,16 +29,30 @@ class InferenceEngine(BaseExperiment):
             if weight_path is None
             else weight_path
         )
-        assert os.path.exists(path)
-        state = torch.load(path, map_location=torch.device("cpu"))
-        self.model.load_state_dict(state["model"])
-        self.model.eval()
-        return self
+        if path.endswith(".trace") or os.path.exists(path + ".trace"):
+            if not path.endswith(".trace"):
+                path += ".trace"  # load trace instead; inference should be faster
+            model = torch.jit.load(path, map_location=torch.device("cpu"))
+        else:
+            assert os.path.exists(path)
+            model: torch.nn.Module = ContactTracingTransformer(
+                **self.get("model/kwargs", {})
+            )
+            state = torch.load(path, map_location=torch.device("cpu"))
+            model.load_state_dict(state["model"])
+        model.eval()
+        return model
 
     def infer(self, human_day_info):
         with torch.no_grad():
             model_input = self.preprocessor.preprocess(human_day_info, as_batch=True)
             model_output = self.model(model_input.to_dict())
+            if isinstance(self.model, torch.jit.ScriptModule):
+                # traced model outputs a tuple due to design limitation; remap here
+                model_output = {
+                    "encounter_variables": model_output[0],
+                    "latent_variable": model_output[1],
+                }
             contagion_proba = (
                 model_output["encounter_variables"].sigmoid().numpy()[0, :, 0]
             )

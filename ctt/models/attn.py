@@ -31,7 +31,11 @@ class MAB(nn.Module):
         V_ = torch.cat(V.split(dim_split, 2), 0)
 
         A = self._compute_attention_weights(Q_, K_, weights)
-        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
+        split_size = Q.shape[0]  # funky split spaghetti to avoid pytorch call overload issues
+        if not isinstance(split_size, torch.Tensor):
+            split_size = torch.IntTensor([split_size])[0]
+        # split will still throw a tracing warning, but we can't avoid the int conversion...
+        O = torch.cat(super(torch.Tensor, Q_ + A.bmm(V_)).split(split_size, dim=0), 2)
         O = O if getattr(self, "ln0", None) is None else self.ln0(O)
         O = O + F.relu(self.fc_o(O))
         O = O if getattr(self, "ln1", None) is None else self.ln1(O)

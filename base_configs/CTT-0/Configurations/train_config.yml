@@ -67,6 +67,7 @@ training:
   checkpoint:
     every: 5
     if_best: true
+    save_trace: true
 
 wandb:
   use: false

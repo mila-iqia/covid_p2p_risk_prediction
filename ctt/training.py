@@ -5,6 +5,7 @@ from addict import Dict
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.jit
 
 from speedrun import (
     BaseExperiment,
@@ -30,6 +31,7 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         super(CTTTrainer, self).__init__()
         self.auto_setup()
         self._build()
+        self._dummy_sample = None  # kept for repeated tracing only
 
     def _build(self):
         self._build_loaders()
@@ -154,11 +156,7 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
     def checkpoint(self, force=False):
         # Checkpoint as required
         if force or self.epoch % self.get("training/checkpoint/every", 1) == 0:
-            info_dict = {
-                "model": self.model.state_dict(),
-                "optim": self.optim.state_dict(),
-            }
-            torch.save(info_dict, self.checkpoint_path)
+            self._write_checkpoint(self.checkpoint_path)
         if self.get("training/checkpoint/if_best", True):
             # Save a checkpoint if the validation loss is better than best
             self.checkpoint_if_best_validation_loss()
@@ -174,15 +172,29 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         if current_validation_loss < best_validation_loss:
             self.write_to_cache("best_validation_loss", current_validation_loss)
             ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
-        else:
-            ckpt_path = None
-        if ckpt_path is not None:
-            info_dict = {
-                "model": self.model.state_dict(),
-                "optim": self.optim.state_dict(),
-            }
-            torch.save(info_dict, ckpt_path)
+            self._write_checkpoint(ckpt_path)
         return self
+
+    def _write_checkpoint(self, ckpt_path: str):
+        as_trace_too = self.get("training/checkpoint/save_trace", False)
+        if as_trace_too:
+            if self._dummy_sample is None:
+                # getting a single minibatch from the data loader might be pretty slow, but
+                # we don't have a choice if we want to trace the model...
+                #self._dummy_sample = next(iter(self.train_loader))
+                with open("/tmp/batch.pkl", "rb") as fd:
+                    import pickle
+                    self._dummy_sample = pickle.load(fd)
+            self.model.eval()
+            with self.model.output_as_tuple():
+                test_output = self.model(self._dummy_sample)
+                trace = torch.jit.trace(self.model, (self._dummy_sample, ), )
+            trace.save(ckpt_path + ".trace")
+        info_dict = {
+            "model": self.model.state_dict(),
+            "optim": self.optim.state_dict(),
+        }
+        torch.save(info_dict, ckpt_path)
 
     def load(self, device=None):
         ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
@@ -192,6 +204,8 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
             ckpt_path,
             map_location=torch.device((self.device if device is None else device)),
         )
+        assert isinstance(info_dict, (dict, Dict)), \
+            "checkpoint did not contain object map; are you trying to reload a trace?"
         self.model.load_state_dict(info_dict["model"])
         self.optim.load_state_dict(info_dict["optim"])
         return self

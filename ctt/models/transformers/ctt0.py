@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from ctt.models import modules as mods, attn
+from ctt.models import tracing_helpers as trac
 
 
 # Legend
@@ -35,6 +36,7 @@ class _ContactTracingTransformer(nn.Module):
         super(_ContactTracingTransformer, self).__init__()
         # Private
         self._diagnose = False
+        self._output_as_tuple = False  # toggle for tracing only
         # Public
         self.health_history_embedding = health_history_embedding
         self.health_profile_embedding = health_profile_embedding
@@ -56,6 +58,13 @@ class _ContactTracingTransformer(nn.Module):
         self._diagnose = True
         yield
         self._diagnose = old_diagnose
+
+    @contextmanager
+    def output_as_tuple(self):
+        old_output_as_tuple = self._output_as_tuple
+        self._output_as_tuple = True
+        yield
+        self._output_as_tuple = old_output_as_tuple
 
     def forward(self, inputs):
         """
@@ -107,6 +116,8 @@ class _ContactTracingTransformer(nn.Module):
         batch_size = inputs["health_history"].shape[0]
         num_history_days = inputs["health_history"].shape[1]
         num_encounters = inputs["encounter_health"].shape[1]
+        if not isinstance(num_encounters, torch.Tensor):  # for tracing
+            num_encounters = torch.IntTensor([num_encounters])[0]
         # -------- Embeddings --------
         # Embed health history
         embedded_health_history = self.health_history_embedding(
@@ -194,12 +205,12 @@ class _ContactTracingTransformer(nn.Module):
         entities = self.entity_masker(entities, expanded_mask)
         # Grab a copy of the "meta-data", which we will be appending to entities at
         # every step. These meta-data are the time-stamps and partner_ids
-        meta_data_dim = (
-            embedded_history_days.shape[2]
-            + embedded_encounter_partner_ids.shape[2]
-            + embedded_encounter_duration.shape[2]
+        meta_data = trac.get_embedding_meta_data(
+            entities,
+            embedded_history_days,
+            embedded_encounter_partner_ids,
+            embedded_encounter_duration,
         )
-        meta_data = entities[:, :, :meta_data_dim]
         # Make a mask for the attention mech. This mask prevents attention between
         # two entities if either one of them is a padding entity.
         attention_mask = expanded_mask[:, :, None] * expanded_mask[:, None, :]
@@ -211,15 +222,25 @@ class _ContactTracingTransformer(nn.Module):
             # Append meta-data for the next round of message passing
             entities = torch.cat([meta_data, entities], dim=2)
         # -------- Latent Variables
-        pre_latent_variable = entities[:, num_encounters:]
+        pre_latent_variable = trac.get_pre_latent_variable(entities, num_encounters)
         # Push through the latent variable MLP to get the latent variables
         # latent_variable.shape = BTC
         latent_variable = self.latent_variable_mlp(pre_latent_variable)
         # -------- Generate Output Variables --------
         # Process encounters to their variables
-        pre_encounter_variables = entities[:, :num_encounters, meta_data_dim:]
+        pre_encounter_variables = trac.get_pre_encounter_variables(
+            entities,
+            embedded_history_days,
+            embedded_encounter_partner_ids,
+            embedded_encounter_duration,
+            num_encounters,
+        )
         encounter_variables = self.encounter_mlp(pre_encounter_variables)
         # Done: pack to an addict and return
+        assert not self._diagnose or not self._output_as_tuple, \
+            "cannot produce tuple (for tracing) while diagnosing"
+        if self._output_as_tuple:
+            return encounter_variables, latent_variable
         results = dict()
         results["encounter_variables"] = encounter_variables
         results["latent_variable"] = latent_variable
