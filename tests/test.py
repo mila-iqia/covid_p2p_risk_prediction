@@ -5,7 +5,7 @@ class Tests(unittest.TestCase):
 
     DATASET_PATH = (
         ZIP_PATH
-    ) = "../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200506-223009-output.zip"
+    ) = "../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509-182246-output.zip"
     EXP_DIR = "/Users/nrahaman/Python/ctt/tmp/CTT-SHIPMENT-0"
     NUM_KEYS_IN_BATCH = 15
 
@@ -47,7 +47,7 @@ class Tests(unittest.TestCase):
         from torch.utils.data import DataLoader
         from ctt.models.transformer import ContactTracingTransformer
 
-        torch.random.manual_seed(42)
+        torch.random.manual_seed(43)
 
         batch_size = 5
         path = self.DATASET_PATH
@@ -90,8 +90,39 @@ class Tests(unittest.TestCase):
         latent_ist_wert = padded_output["latent_variable"]
         self.assertSequenceEqual(encounter_soll_wert.shape, encounter_ist_wert.shape)
         self.assertSequenceEqual(latent_ist_wert.shape, latent_soll_wert.shape)
-        self.assert_(torch.allclose(encounter_soll_wert, encounter_ist_wert))
-        self.assert_(torch.allclose(latent_soll_wert, latent_ist_wert))
+        self.assertTrue(
+            torch.allclose(encounter_soll_wert, encounter_ist_wert, atol=1e-7)
+        )
+        self.assertTrue(torch.allclose(latent_soll_wert, latent_ist_wert, atol=1e-7))
+
+    def test_model_jit(self):
+        import torch
+        from ctt.data_loading.loader import ContactDataset
+        from torch.utils.data import DataLoader
+        from ctt.models.transformer import ContactTracingTransformer
+        from addict import Dict
+
+        batch_size = 5
+        path = self.DATASET_PATH
+        dataset = ContactDataset(path)
+        dataloader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            collate_fn=ContactDataset.collate_fn,
+            shuffle=False,
+        )
+        dataloader_iter = iter(dataloader)
+        batch = next(dataloader_iter)
+        model: ContactTracingTransformer = ContactTracingTransformer()
+        model.eval()
+        with model.output_as_tuple():
+            trace = torch.jit.trace(model, (batch,),)
+        # Compare trace outputs with another batch
+        batch = next(dataloader_iter)
+        model_output = model(batch)
+        trace_output = ContactTracingTransformer.output_tuple_to_dict(trace(batch))
+        for key in model_output.keys():
+            self.assertTrue(torch.allclose(model_output[key], trace_output[key]))
 
     def test_losses(self):
         from ctt.data_loading.loader import ContactDataset
@@ -181,7 +212,7 @@ class Tests(unittest.TestCase):
             )
 
         dataset = ContactDataset(path)
-        sample = dataset.get(890, 3, 1)
+        sample = dataset.get(67, 13, 1)
         validate(sample)
 
         dataset = ContactDataset(path, bit_encoded_messages=False)
@@ -203,8 +234,11 @@ class Tests(unittest.TestCase):
         # Test the conversion to TFLite
         for nb_messages in [10, 50, 100]:
             max_diff = convert_pytorch_model_fixed_messages(
-                model, nb_messages, working_directory="./tmp/test_dir/",
-                dataset_path=self.DATASET_PATH)
+                model,
+                nb_messages,
+                working_directory="./tmp/test_dir/",
+                dataset_path=self.DATASET_PATH,
+            )
             self.assertLess(max_diff, 0.005)
 
     def test_inference_engine_determinism(self):
@@ -222,9 +256,7 @@ class Tests(unittest.TestCase):
             output_1 = engine.infer(hdi)
             output_2 = engine.infer(hdi)
             for key in output_1:
-                self.assert_(np.allclose(output_1[key], output_2[key]))
-
-
+                self.assert_(np.all(output_1[key] == output_2[key]))
 
 
 if __name__ == "__main__":
