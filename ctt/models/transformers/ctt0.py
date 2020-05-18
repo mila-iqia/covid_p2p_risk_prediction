@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 
 from ctt.models import modules as mods, attn
-from ctt.models import tracing_helpers as trac
 
 
 # Legend
@@ -117,6 +116,7 @@ class _ContactTracingTransformer(nn.Module):
         num_history_days = inputs["health_history"].shape[1]
         num_encounters = inputs["encounter_health"].shape[1]
         if not isinstance(num_encounters, torch.Tensor):  # for tracing
+            # noinspection PyArgumentList
             num_encounters = torch.IntTensor([num_encounters])[0]
         # -------- Embeddings --------
         # Embed health history
@@ -145,6 +145,7 @@ class _ContactTracingTransformer(nn.Module):
                 inputs["encounter_partner_id"], inputs["mask"]
             )
         else:
+            # noinspection PyTypeChecker
             embedded_encounter_partner_ids = self.partner_id_placeholder[
                 None, None
             ].expand(batch_size, num_encounters, self.partner_id_placeholder.shape[-1])
@@ -205,7 +206,7 @@ class _ContactTracingTransformer(nn.Module):
         entities = self.entity_masker(entities, expanded_mask)
         # Grab a copy of the "meta-data", which we will be appending to entities at
         # every step. These meta-data are the time-stamps and partner_ids
-        meta_data = trac.get_embedding_meta_data(
+        meta_data = self._get_embedding_meta_data(
             entities,
             embedded_history_days,
             embedded_encounter_partner_ids,
@@ -222,13 +223,13 @@ class _ContactTracingTransformer(nn.Module):
             # Append meta-data for the next round of message passing
             entities = torch.cat([meta_data, entities], dim=2)
         # -------- Latent Variables
-        pre_latent_variable = trac.get_pre_latent_variable(entities, num_encounters)
+        pre_latent_variable = self._get_pre_latent_variable(entities, num_encounters)
         # Push through the latent variable MLP to get the latent variables
         # latent_variable.shape = BTC
         latent_variable = self.latent_variable_mlp(pre_latent_variable)
         # -------- Generate Output Variables --------
         # Process encounters to their variables
-        pre_encounter_variables = trac.get_pre_encounter_variables(
+        pre_encounter_variables = self._get_pre_encounter_variables(
             entities,
             embedded_history_days,
             embedded_encounter_partner_ids,
@@ -252,6 +253,60 @@ class _ContactTracingTransformer(nn.Module):
             _locals.pop("latent_variable")
             results.update(_locals)
         return results
+
+    @staticmethod
+    @torch.jit.script
+    def _get_embedding_meta_data(
+            entities: torch.Tensor,
+            embedded_history_days: torch.Tensor,
+            embedded_encounter_partner_ids: torch.Tensor,
+            embedded_encounter_duration: torch.Tensor,
+    ) -> torch.Tensor:
+        meta_data_dim = (
+                embedded_history_days.shape[2]
+                + embedded_encounter_partner_ids.shape[2]
+                + embedded_encounter_duration.shape[2]
+        )
+        return entities[:, :, :meta_data_dim]
+
+    @staticmethod
+    @torch.jit.script
+    def _get_pre_encounter_variables(
+            entities: torch.Tensor,
+            embedded_history_days: torch.Tensor,
+            embedded_encounter_partner_ids: torch.Tensor,
+            embedded_encounter_duration: torch.Tensor,
+            num_encounters: torch.Tensor,
+    ) -> torch.Tensor:
+        meta_data_dim = (
+                embedded_history_days.shape[2]
+                + embedded_encounter_partner_ids.shape[2]
+                + embedded_encounter_duration.shape[2]
+        )
+        return entities[:, :num_encounters, meta_data_dim:]
+
+    @staticmethod
+    @torch.jit.script
+    def _get_pre_latent_variable(
+            entities: torch.Tensor,
+            num_encounters: torch.Tensor,
+    ) -> torch.Tensor:
+        return entities[:, num_encounters:]
+
+    @staticmethod
+    @torch.jit.script
+    def _get_embedded_encounter_partner_ids(
+            partner_id_placeholder: torch.Tensor,
+            num_encounters: torch.Tensor,
+            batch_size: torch.Tensor,
+    ) -> torch.Tensor:
+        return partner_id_placeholder[
+            None, None
+        ].expand(
+            batch_size.item(),
+            num_encounters.item(),
+            partner_id_placeholder.shape[-1]
+        )
 
 
 class ContactTracingTransformer(_ContactTracingTransformer):
@@ -412,8 +467,3 @@ class ContactTracingTransformer(_ContactTracingTransformer):
             partner_id_placeholder=partner_id_placeholder,
             duration_placeholder=duration_placeholder,
         )
-
-
-if __name__ == '__main__':
-    model = ContactTracingTransformer()
-    torch.save(model.state_dict(),"./model.pth")

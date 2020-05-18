@@ -58,16 +58,3 @@ class InferenceEngine(BaseExperiment):
             )
             infectiousness = model_output["latent_variable"].numpy()[0, :, 0]
         return dict(contagion_proba=contagion_proba, infectiousness=infectiousness)
-
-
-if __name__ == "__main__":
-    from ctt.data_loading.loader import ContactDataset
-
-    dataset = ContactDataset(
-        path="/Users/nrahaman/Python/ctt/data/sim_people-1000_days-60_init-0"
-    )
-    hdi = dataset.read(0, 0)
-
-    engine = InferenceEngine("/Users/nrahaman/Python/ctt/exp/DEBUG-0")
-    output = engine.infer(hdi)
-    pass
