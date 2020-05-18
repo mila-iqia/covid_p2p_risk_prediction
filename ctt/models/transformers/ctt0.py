@@ -65,6 +65,56 @@ class _ContactTracingTransformer(nn.Module):
         yield
         self._output_as_tuple = old_output_as_tuple
 
+    def embed(self, inputs):
+        # -------- Shape Wrangling --------
+        batch_size = inputs["health_history"].shape[0]
+        num_history_days = inputs["health_history"].shape[1]
+        num_encounters = inputs["encounter_health"].shape[1]
+        if not isinstance(num_encounters, torch.Tensor):  # for tracing
+            # noinspection PyArgumentList
+            num_encounters = torch.IntTensor([num_encounters])[0]
+        # -------- Embeddings --------
+        embeddings = dict()
+        # Embed health history
+        embeddings["embedded_health_history"] = self.health_history_embedding(
+            inputs["health_history"], inputs["valid_history_mask"]
+        )
+        embeddings["embedded_health_profile"] = self.health_profile_embedding(
+            inputs["health_profile"]
+        )
+        embeddings["embedded_encounter_health"] = self.health_history_embedding(
+            inputs["encounter_health"], inputs["mask"]
+        )
+        # Embed time (days and duration)
+        embeddings["embedded_history_days"] = self.time_embedding(
+            inputs["history_days"], inputs["valid_history_mask"]
+        )
+        embeddings["embedded_encounter_day"] = self.time_embedding(
+            inputs["encounter_day"], inputs["mask"]
+        )
+        embeddings["embedded_encounter_duration"] = self.duration_embedding(
+            inputs["encounter_duration"], inputs["mask"]
+        )
+        # Embed partner-IDs
+        if self.partner_id_embedding is not None:
+            embeddings["embedded_encounter_partner_ids"] = self.partner_id_embedding(
+                inputs["encounter_partner_id"], inputs["mask"]
+            )
+        else:
+            # noinspection PyTypeChecker
+            embedded_encounter_partner_ids = self.partner_id_placeholder[
+                None, None
+            ].expand(batch_size, num_encounters, self.partner_id_placeholder.shape[-1])
+            embeddings["embedded_encounter_partner_ids"] = self.entity_masker(
+                embedded_encounter_partner_ids, inputs["mask"]
+            )
+        # Embed messages
+        embeddings["embedded_encounter_messages"] = self.message_embedding(
+            inputs["encounter_message"], inputs["mask"]
+        )
+        # Done
+        return embeddings
+
     def forward(self, inputs):
         """
         inputs is a dict containing the below keys. The format of the tensors
@@ -119,80 +169,56 @@ class _ContactTracingTransformer(nn.Module):
             # noinspection PyArgumentList
             num_encounters = torch.IntTensor([num_encounters])[0]
         # -------- Embeddings --------
-        # Embed health history
-        embedded_health_history = self.health_history_embedding(
-            inputs["health_history"], inputs["valid_history_mask"]
-        )
-        embedded_health_profile = self.health_profile_embedding(
-            inputs["health_profile"]
-        )
-        embedded_encounter_health = self.health_history_embedding(
-            inputs["encounter_health"], inputs["mask"]
-        )
-        # Embed time (days and duration)
-        embedded_history_days = self.time_embedding(
-            inputs["history_days"], inputs["valid_history_mask"]
-        )
-        embedded_encounter_day = self.time_embedding(
-            inputs["encounter_day"], inputs["mask"]
-        )
-        embedded_encounter_duration = self.duration_embedding(
-            inputs["encounter_duration"], inputs["mask"]
-        )
-        # Embed partner-IDs
-        if self.partner_id_embedding is not None:
-            embedded_encounter_partner_ids = self.partner_id_embedding(
-                inputs["encounter_partner_id"], inputs["mask"]
-            )
-        else:
-            # noinspection PyTypeChecker
-            embedded_encounter_partner_ids = self.partner_id_placeholder[
-                None, None
-            ].expand(batch_size, num_encounters, self.partner_id_placeholder.shape[-1])
-            embedded_encounter_partner_ids = self.entity_masker(
-                embedded_encounter_partner_ids, inputs["mask"]
-            )
-        # Embed messages
-        embedded_encounter_messages = self.message_embedding(
-            inputs["encounter_message"], inputs["mask"]
-        )
+        embeddings = self.embed(inputs)
         # -------- Self Attention --------
         # Prepare the entities -- one set for the encounters and the other for self health
         # Before we start, expand health profile from BC to BMC and append to entities
-        expanded_health_profile_per_encounter = embedded_health_profile[
+        expanded_health_profile_per_encounter = embeddings["embedded_health_profile"][
             :, None, :
-        ].expand(batch_size, num_encounters, embedded_health_profile.shape[-1])
+        ].expand(
+            batch_size, num_encounters, embeddings["embedded_health_profile"].shape[-1]
+        )
         encounter_entities = torch.cat(
             [
-                embedded_encounter_day,
-                embedded_encounter_partner_ids,
-                embedded_encounter_duration,
-                embedded_encounter_health,
-                embedded_encounter_messages,
+                embeddings["embedded_encounter_day"],
+                embeddings["embedded_encounter_partner_ids"],
+                embeddings["embedded_encounter_duration"],
+                embeddings["embedded_encounter_health"],
+                embeddings["embedded_encounter_messages"],
                 expanded_health_profile_per_encounter,
             ],
             dim=-1,
         )
         # Expand the messages and placeholders from C to BTC
         expanded_message_placeholder = self.message_placeholder[None, None].expand(
-            batch_size, num_history_days, embedded_encounter_messages.shape[-1]
+            batch_size,
+            num_history_days,
+            embeddings["embedded_encounter_messages"].shape[-1],
         )
         expanded_pid_placeholder = self.partner_id_placeholder[None, None].expand(
-            batch_size, num_history_days, embedded_encounter_partner_ids.shape[-1]
+            batch_size,
+            num_history_days,
+            embeddings["embedded_encounter_partner_ids"].shape[-1],
         )
         expanded_duration_placeholder = self.duration_placeholder[None, None].expand(
-            batch_size, num_history_days, embedded_encounter_duration.shape[-1]
+            batch_size,
+            num_history_days,
+            embeddings["embedded_encounter_duration"].shape[-1],
         )
         # Expand the health profile from C to BTC
-        expanded_health_profile_per_day = embedded_health_profile[:, None, :].expand(
-            batch_size, num_history_days, embedded_health_profile.shape[-1]
+        expanded_health_profile_per_day = embeddings["embedded_health_profile"][
+            :, None, :
+        ].expand(
+            batch_size,
+            num_history_days,
+            embeddings["embedded_health_profile"].shape[-1],
         )
         self_entities = torch.cat(
             [
-                embedded_history_days,
+                embeddings["embedded_history_days"],
                 expanded_pid_placeholder,
                 expanded_duration_placeholder,
-                embedded_health_history,
+                embeddings["embedded_health_history"],
                 expanded_message_placeholder,
                 expanded_health_profile_per_day,
             ],
@@ -208,9 +234,9 @@ class _ContactTracingTransformer(nn.Module):
         # every step. These meta-data are the time-stamps and partner_ids
         meta_data = self._get_embedding_meta_data(
             entities,
-            embedded_history_days,
-            embedded_encounter_partner_ids,
-            embedded_encounter_duration,
+            embeddings["embedded_history_days"],
+            embeddings["embedded_encounter_partner_ids"],
+            embeddings["embedded_encounter_duration"],
         )
         # Make a mask for the attention mech. This mask prevents attention between
         # two entities if either one of them is a padding entity.
@@ -231,15 +257,16 @@ class _ContactTracingTransformer(nn.Module):
         # Process encounters to their variables
         pre_encounter_variables = self._get_pre_encounter_variables(
             entities,
-            embedded_history_days,
-            embedded_encounter_partner_ids,
-            embedded_encounter_duration,
+            embeddings["embedded_history_days"],
+            embeddings["embedded_encounter_partner_ids"],
+            embeddings["embedded_encounter_duration"],
             num_encounters,
         )
         encounter_variables = self.encounter_mlp(pre_encounter_variables)
         # Done: pack to an addict and return
-        assert not self._diagnose or not self._output_as_tuple, \
-            "cannot produce tuple (for tracing) while diagnosing"
+        assert (
+            not self._diagnose or not self._output_as_tuple
+        ), "cannot produce tuple (for tracing) while diagnosing"
         if self._output_as_tuple:
             return encounter_variables, latent_variable
         results = dict()
@@ -255,57 +282,63 @@ class _ContactTracingTransformer(nn.Module):
         return results
 
     @staticmethod
+    def output_tuple_to_dict(output_tuple):
+        if isinstance(output_tuple, dict):
+            assert "encounter_variables" in output_tuple
+            assert "latent_variable" in output_tuple
+            # output_tuple is actually the dict we're after, so:
+            return output_tuple
+        results = dict()
+        results["encounter_variables"], results["latent_variable"] = output_tuple
+        return results
+
+    @staticmethod
     @torch.jit.script
     def _get_embedding_meta_data(
-            entities: torch.Tensor,
-            embedded_history_days: torch.Tensor,
-            embedded_encounter_partner_ids: torch.Tensor,
-            embedded_encounter_duration: torch.Tensor,
+        entities: torch.Tensor,
+        embedded_history_days: torch.Tensor,
+        embedded_encounter_partner_ids: torch.Tensor,
+        embedded_encounter_duration: torch.Tensor,
     ) -> torch.Tensor:
         meta_data_dim = (
-                embedded_history_days.shape[2]
-                + embedded_encounter_partner_ids.shape[2]
-                + embedded_encounter_duration.shape[2]
+            embedded_history_days.shape[2]
+            + embedded_encounter_partner_ids.shape[2]
+            + embedded_encounter_duration.shape[2]
         )
         return entities[:, :, :meta_data_dim]
 
     @staticmethod
     @torch.jit.script
     def _get_pre_encounter_variables(
-            entities: torch.Tensor,
-            embedded_history_days: torch.Tensor,
-            embedded_encounter_partner_ids: torch.Tensor,
-            embedded_encounter_duration: torch.Tensor,
-            num_encounters: torch.Tensor,
+        entities: torch.Tensor,
+        embedded_history_days: torch.Tensor,
+        embedded_encounter_partner_ids: torch.Tensor,
+        embedded_encounter_duration: torch.Tensor,
+        num_encounters: torch.Tensor,
     ) -> torch.Tensor:
         meta_data_dim = (
-                embedded_history_days.shape[2]
-                + embedded_encounter_partner_ids.shape[2]
-                + embedded_encounter_duration.shape[2]
+            embedded_history_days.shape[2]
+            + embedded_encounter_partner_ids.shape[2]
+            + embedded_encounter_duration.shape[2]
         )
         return entities[:, :num_encounters, meta_data_dim:]
 
     @staticmethod
     @torch.jit.script
     def _get_pre_latent_variable(
-            entities: torch.Tensor,
-            num_encounters: torch.Tensor,
+        entities: torch.Tensor, num_encounters: torch.Tensor,
     ) -> torch.Tensor:
         return entities[:, num_encounters:]
 
     @staticmethod
     @torch.jit.script
     def _get_embedded_encounter_partner_ids(
-            partner_id_placeholder: torch.Tensor,
-            num_encounters: torch.Tensor,
-            batch_size: torch.Tensor,
+        partner_id_placeholder: torch.Tensor,
+        num_encounters: torch.Tensor,
+        batch_size: torch.Tensor,
     ) -> torch.Tensor:
-        return partner_id_placeholder[
-            None, None
-        ].expand(
-            batch_size.item(),
-            num_encounters.item(),
-            partner_id_placeholder.shape[-1]
+        return partner_id_placeholder[None, None].expand(
+            batch_size.item(), num_encounters.item(), partner_id_placeholder.shape[-1]
         )
 
 
