@@ -95,7 +95,7 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
     # Load dataset (used for sanity checking the converted models)
     dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0,
                                 path=dataset_path)
-                                
+
     # Find a minibatch with, at most, the number of messages that we want to
     # create a TFLite model for. If it has less than that number of messages,
     # pad it so it has the right number.
@@ -104,7 +104,7 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
         if b['mask'].shape[1] <= nb_messages:
             batch = pad_messages_minibatch(b, nb_messages)
             break
-    
+
     if batch is None:
         raise ValueError("Attempting to create TFLite model for a nb of "
                          "messages lower than anything in the dataset")
@@ -168,9 +168,9 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
     # Sanity-check the Tensorflow and TFLite models on the examples that have, at most,
     # the maximum number of messages that they can handle.
     interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
-    pytorch_tf_deltas = []
-    tf_tflite_deltas = []
-    pytorch_tflite_deltas = []
+    max_pytorch_tf_delta = -1
+    max_tf_tflite_delta = -1
+    max_pytorch_tflite_delta = -1
     nb_validation_samples = 0
     for batch in iter(dataloader):
 
@@ -212,13 +212,16 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
         # Compare the three models
         for k in pytorch_output.keys():
             k_pytorch_tf_delta = pytorch_output[k].detach().numpy() - tf_output[k]
-            pytorch_tf_deltas.append(k_pytorch_tf_delta)
+            max_pytorch_tf_delta = max(max_pytorch_tf_delta,
+                                       numpy.abs(k_pytorch_tf_delta).max())
 
             k_tf_tflite_delta = tf_output[k] - tflite_output[k]
-            tf_tflite_deltas.append(k_tf_tflite_delta)
+            max_tf_tflite_delta = max(max_tf_tflite_delta,
+                                      numpy.abs(k_tf_tflite_delta).max())
 
             k_pytorch_tflite_delta = pytorch_output[k].detach().numpy() - tflite_output[k]
-            pytorch_tflite_deltas.append(k_pytorch_tflite_delta)
+            max_pytorch_tflite_delta = max(max_pytorch_tflite_delta,
+                                           numpy.abs(k_pytorch_tflite_delta).max())
 
         # Limit the testing to avoid spending too much time on it.
         nb_validation_samples += 1
@@ -234,28 +237,18 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
     log_filename = os.path.join(working_directory, "model_%i_messages.txt" % nb_messages)
     with open(log_filename, "w") as f:
 
-        abs_pytorch_tf_deltas = numpy.abs(numpy.hstack(pytorch_tf_deltas))
-        abs_tf_tflite_deltas = numpy.abs(numpy.hstack(tf_tflite_deltas))
-        abs_pytorch_tflite_deltas = numpy.abs(numpy.hstack(pytorch_tflite_deltas))
-
         f.write("Models compared on %i validation samples\n\n" % nb_validation_samples)
 
         f.write("Conversion from pytorch model to TF model\n")
-        f.write("  Min abs diff between outputs : %f \n" % abs_pytorch_tf_deltas.min())
-        f.write("  Mean abs diff between outputs : %f \n" % abs_pytorch_tf_deltas.mean())
-        f.write("  Max abs diff between outputs : %f \n\n" % abs_pytorch_tf_deltas.max())
+        f.write("  Max abs diff between outputs : %f \n\n" % max_pytorch_tf_delta)
 
         f.write("Conversion from TF model to TFLite model\n")
-        f.write("  Min abs diff between outputs : %f \n" % abs_tf_tflite_deltas.min())
-        f.write("  Mean abs diff between outputs : %f \n" % abs_tf_tflite_deltas.mean())
-        f.write("  Max abs diff between outputs : %f \n\n" % abs_tf_tflite_deltas.max())
+        f.write("  Max abs diff between outputs : %f \n\n" % max_tf_tflite_delta)
 
         f.write("Overall conversion from pytorch model to TFLite model\n")
-        f.write("  Min abs diff between outputs : %f \n" % abs_pytorch_tflite_deltas.min())
-        f.write("  Mean abs diff between outputs : %f \n" % abs_pytorch_tflite_deltas.mean())
-        f.write("  Max abs diff between outputs : %f \n\n" % abs_pytorch_tflite_deltas.max())
+        f.write("  Max abs diff between outputs : %f \n\n" % max_pytorch_tflite_delta)
 
-    return abs_pytorch_tflite_deltas.max()
+    return max_pytorch_tflite_delta
 
 
 if __name__ == '__main__':
