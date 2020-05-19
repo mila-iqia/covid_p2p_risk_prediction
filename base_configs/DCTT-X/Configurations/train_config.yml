@@ -41,6 +41,10 @@ losses:
     contagion: 0.7
     infectiousness: 1.0
 
+metrics:
+  kwargs:
+    diurnal_exposures: true
+
 model:
   name: DiurnalContactTracingTransformer
   kwargs:

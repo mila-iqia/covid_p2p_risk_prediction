@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ctt.utils import typed_sum_pool
 
 # Metrics we are using:
 #
@@ -32,8 +33,9 @@ import torch.nn.functional as F
 
 
 class Metrics(nn.Module):
-    def __init__(self):
+    def __init__(self, diurnal_exposures=False):
         super(Metrics, self).__init__()
+        self.diurnal_exposures = diurnal_exposures
         self.total_infectiousness_loss = 0
         self.total_infectiousness_count = 0
         self.total_encounter_mrr = 0
@@ -65,15 +67,25 @@ class Metrics(nn.Module):
 
         # Task 2: Encounter Contagion Prediction
         # Extract prediction from model_output
+        if self.diurnal_exposures:
+            encounter_is_contagion = typed_sum_pool(
+                model_input.encounter_is_contagion,
+                type_=model_input.encounter_day,
+                reference_types=model_input.history_days,
+            )
+            mask = model_input.valid_history_mask
+        else:
+            encounter_is_contagion = model_input.encounter_is_contagion
+            mask = model_input.mask
         prediction = model_output.encounter_variables.squeeze(2).masked_fill(
-            (1 - model_input.mask).bool(), -float("inf")
+            (1 - mask).bool(), -float("inf")
         )
         logit_sink = torch.zeros(
             (prediction.size(0), 1), dtype=prediction.dtype, device=prediction.device,
         )
         prediction = torch.cat([prediction, logit_sink], dim=1)
         # Extract prediction from model_input
-        target = model_input.encounter_is_contagion.squeeze(2)
+        target = encounter_is_contagion.squeeze(2)
         for k in range(target.size(0)):
             # Find position of target encounter
             label = (target[k] == 1).nonzero()
@@ -89,7 +101,7 @@ class Metrics(nn.Module):
 
         # Task 3: Status Prediction
         prediction = model_output.encounter_variables.squeeze(2).masked_fill(
-            (1 - model_input.mask).bool(), -float("inf")
+            (1 - mask).bool(), -float("inf")
         )
         logit_sink = torch.zeros(
             (prediction.size(0), 1), dtype=prediction.dtype, device=prediction.device,

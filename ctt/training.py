@@ -66,7 +66,7 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
         optim_cls = getattr(opts, self.get("optim/name", "Adam"))
         self.optim = optim_cls(self.model.parameters(), **self.get("optim/kwargs"))
-        self.metrics = Metrics()
+        self.metrics = Metrics(**self.get("metrics/kwargs", {}))
 
     def _build_scheduler(self):
         # Set up an epoch-wise scheduler here if you want to, but the
