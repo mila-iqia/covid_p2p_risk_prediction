@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ctt.models.modules import EntityMasker
+from ctt.utils import typed_sum_pool
 
 
 def get_class(key):
@@ -52,7 +53,7 @@ class InfectiousnessLoss(nn.Module):
 
 
 class ContagionLoss(nn.Module):
-    def __init__(self, allow_multiple_exposures=True):
+    def __init__(self, allow_multiple_exposures=True, diurnal_exposures=False):
         """
         Parameters
         ----------
@@ -61,20 +62,35 @@ class ContagionLoss(nn.Module):
             in which case, we use a softmax + cross-entropy loss. If set to True,
             multiple events can be contagions, in which case we use sigmoid +
             binary cross entropy loss.
+        diurnal_exposures : bool
+            If this is set to True (default: False), then we are interested in
+            predicting in which of the past 14 (or however many) days there was a
+            contagion encounter.
         """
         super(ContagionLoss, self).__init__()
         self.allow_multiple_exposures = allow_multiple_exposures
+        self.diurnal_exposures = diurnal_exposures
         self.masked_bce = EntityMaskedLoss(nn.BCEWithLogitsLoss)
         self.masker = EntityMasker(mode="logsum")
 
     def forward(self, model_input, model_output):
         contagion_logit = model_output.encounter_variables[:, :, 0:1]
         if self.allow_multiple_exposures:
+            if self.diurnal_exposures:
+                # Convert the labels from being per-encounter to being per-day.
+                contagion_labels = typed_sum_pool(
+                    model_input.encounter_is_contagion,
+                    type_=model_input.encounter_day,
+                    reference_types=model_input.history_days,
+                )
+                mask = model_input.valid_history_mask
+            else:
+                contagion_labels = model_input.encounter_is_contagion
+                mask = model_input.mask
             # encounter_variables.shape = BM1
-            return self.masked_bce(
-                contagion_logit, model_input.encounter_is_contagion, model_input.mask
-            )
+            return self.masked_bce(contagion_logit, contagion_labels, mask)
         else:
+            assert not self.diurnal_exposures
             # Mask with masker (this blocks gradients by multiplying it with 0)
             self.masker(contagion_logit, model_input.mask)
             B, M, C = contagion_logit.shape

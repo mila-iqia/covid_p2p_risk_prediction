@@ -150,7 +150,10 @@ class Tests(unittest.TestCase):
     def test_losses(self):
         from ctt.data_loading.loader import ContactDataset
         from torch.utils.data import DataLoader
-        from ctt.models.transformer import ContactTracingTransformer
+        from ctt.models.transformer import (
+            ContactTracingTransformer,
+            DiurnalContactTracingTransformer,
+        )
         from ctt.losses import ContagionLoss, InfectiousnessLoss
         from addict import Dict
 
@@ -171,6 +174,19 @@ class Tests(unittest.TestCase):
         loss = loss_fn(batch, output)
         loss_fn = InfectiousnessLoss()
         loss = loss_fn(batch, output)
+
+        ctt = DiurnalContactTracingTransformer()
+        output = Dict(ctt(batch))
+
+        loss_fn = ContagionLoss(allow_multiple_exposures=True, diurnal_exposures=True)
+        loss = loss_fn(batch, output)
+
+        loss_fn = InfectiousnessLoss()
+        loss = loss_fn(batch, output)
+
+        with self.assertRaises(Exception):
+            loss_fn = ContagionLoss(allow_multiple_exposures=True)
+            loss = loss_fn(batch, output)
 
     def test_loader(self):
         from ctt.data_loading.loader import get_dataloader
