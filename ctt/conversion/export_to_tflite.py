@@ -75,7 +75,7 @@ def pad_messages_minibatch(batch, target_nb_messages):
 
 
 def convert_pytorch_model(pytorch_model, working_directory="./tmp_tfmodel_conversion/",
-                          dataset_path="./data/1k-1-output.zip"):
+                          dataset_path="./data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509-182246-output.zip"):
 
     for nb_messages in NB_MESSAGES_BUCKETS:
         convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
@@ -94,11 +94,20 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
 
     # Load dataset (used for sanity checking the converted models)
     dataloader = get_dataloader(batch_size=1, shuffle=False, num_workers=0,
-                                path=dataset_path, bit_encoded_age=True)
-    batch = next(iter(dataloader))
-
-    # Get a padded batch to use for the conversion to TF and TFLite
-    batch = pad_messages_minibatch(batch, nb_messages)
+                                path=dataset_path)
+                                
+    # Find a minibatch with, at most, the number of messages that we want to
+    # create a TFLite model for. If it has less than that number of messages,
+    # pad it so it has the right number.
+    batch = None
+    for b in iter(dataloader):
+        if b['mask'].shape[1] <= nb_messages:
+            batch = pad_messages_minibatch(b, nb_messages)
+            break
+    
+    if batch is None:
+        raise ValueError("Attempting to create TFLite model for a nb of "
+                         "messages lower than anything in the dataset")
 
     # Get list of inputs names as in the batch
     input_names=[]
@@ -148,10 +157,10 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
 
     # Convert Saved Model to TFLite model
     converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
-    converter.allow_custom_ops=True
+    #converter.allow_custom_ops=True
     converter.experimental_new_converter=True
-    converter.enable_mlir_converter=True
-    #converter.optimizations = [tf.lite.Optimize.DEFAULT] # 8-bits weight quantization
+    #converter.enable_mlir_converter=True
+    converter.optimizations = [tf.lite.Optimize.DEFAULT] # 8-bits weight quantization
     tflite_model = converter.convert()
     tflite_model_path = os.path.join(working_directory, "model_%i_messages.tflite" % nb_messages)
     open(tflite_model_path, "wb").write(tflite_model)
@@ -188,7 +197,7 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
         interpreter.allocate_tensors()
         for inp_detail in interpreter.get_input_details():
             inp_name = inp_detail["name"]
-            interpreter.set_tensor(inp_detail["index"], padded_batch[inp_name])
+            interpreter.set_tensor(inp_detail["index"], padded_batch[inp_name].numpy())
 
         # Get TFLite model outputs
         tflite_output = {}
