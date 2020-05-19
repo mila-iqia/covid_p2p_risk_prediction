@@ -1,5 +1,6 @@
 from typing import Union
 from contextlib import contextmanager
+import warnings
 
 import torch
 import torch.nn as nn
@@ -65,7 +66,7 @@ class _ContactTracingTransformer(nn.Module):
         yield
         self._output_as_tuple = old_output_as_tuple
 
-    def embed(self, inputs):
+    def embed(self, inputs: dict) -> dict:
         # -------- Shape Wrangling --------
         batch_size = inputs["health_history"].shape[0]
         num_history_days = inputs["health_history"].shape[1]
@@ -97,6 +98,10 @@ class _ContactTracingTransformer(nn.Module):
         )
         # Embed partner-IDs
         if self.partner_id_embedding is not None:
+            warnings.warn(
+                "As of this version, it makes no sense to use partner_id_embedding "
+                "(it may even cause some overfitting)."
+            )
             embeddings["embedded_encounter_partner_ids"] = self.partner_id_embedding(
                 inputs["encounter_partner_id"], inputs["mask"]
             )
@@ -115,7 +120,7 @@ class _ContactTracingTransformer(nn.Module):
         # Done
         return embeddings
 
-    def forward(self, inputs):
+    def forward(self, inputs: dict) -> Union[dict, tuple]:
         """
         inputs is a dict containing the below keys. The format of the tensors
         are indicated as e.g. `BTC`, `BMC` (etc), which can be interpreted as
@@ -160,6 +165,7 @@ class _ContactTracingTransformer(nn.Module):
         Returns
         -------
         dict
+            A dict containing the keys "encounter_variables" and "latent_variable".
         """
         # -------- Shape Wrangling --------
         batch_size = inputs["health_history"].shape[0]

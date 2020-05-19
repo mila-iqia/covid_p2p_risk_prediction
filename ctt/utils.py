@@ -30,3 +30,22 @@ def thermometer_encoding(x: torch.Tensor, value_range: Sequence[int], size: int)
         value_range[0], value_range[1], size, dtype=x.dtype, device=x.device
     ).expand(*([1] * (x.dim() - 1) + [size]))
     return torch.gt(x, expanded_linspace).float()
+
+
+def typed_sum_pool(x: torch.Tensor, type_: torch.Tensor, reference_types: torch.Tensor):
+    # x.shape = BMC, type_.shape = BM, reference_types.shape = BT
+    # Validate shapes
+    assert x.ndim == 3
+    if type_.ndim == 3:
+        assert type_.shape[-1] == 1
+        type_ = type_[..., 0]
+        assert type_.shape[1] == x.shape[1]
+    if reference_types.ndim == 3:
+        assert reference_types.shape[-1] == 1
+        reference_types = reference_types[..., 0]
+    # Get a mask of shape BMT, which is 1 if entity idx m is of type index t,
+    # and 0 otherwise
+    type_mask = torch.eq(type_[:, :, None], reference_types[:, None, :]).float()
+    # For a given type t, sum over all entities m that are of type t.
+    pooled = torch.einsum("bmc,bmt->btc", x, type_mask)
+    return pooled

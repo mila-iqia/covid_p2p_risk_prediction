@@ -12,7 +12,10 @@ class Tests(unittest.TestCase):
     def test_model_runs(self):
         from ctt.data_loading.loader import ContactDataset
         from torch.utils.data import DataLoader
-        from ctt.models.transformer import ContactTracingTransformer
+        from ctt.models.transformer import (
+            ContactTracingTransformer,
+            DiurnalContactTracingTransformer,
+        )
         from addict import Dict
 
         batch_size = 5
@@ -41,11 +44,17 @@ class Tests(unittest.TestCase):
         ctt = ContactTracingTransformer(encounter_duration_embedding_mode="sines")
         test_output(ctt)
 
+        ctt = DiurnalContactTracingTransformer()
+        test_output(ctt)
+
     def test_model_padding(self):
         import torch
         from ctt.data_loading.loader import ContactDataset
         from torch.utils.data import DataLoader
-        from ctt.models.transformer import ContactTracingTransformer
+        from ctt.models.transformer import (
+            ContactTracingTransformer,
+            DiurnalContactTracingTransformer,
+        )
 
         torch.random.manual_seed(43)
 
@@ -77,23 +86,37 @@ class Tests(unittest.TestCase):
         # Pad the mask
         padded_batch["mask"] = pad(padded_batch["mask"])
 
-        # Make the model and set it to eval
+        def _test_model(model, test_latents_only=False):
+            with torch.no_grad(), model.diagnose():
+                output = model(batch)
+                padded_output = model(padded_batch)
+
+            encounter_soll_wert = output["encounter_variables"][..., 0]
+            encounter_ist_wert = padded_output["encounter_variables"][
+                ..., :-pad_size, 0
+            ]
+            latent_soll_wert = output["latent_variable"]
+            latent_ist_wert = padded_output["latent_variable"]
+            if not test_latents_only:
+                self.assertSequenceEqual(
+                    encounter_soll_wert.shape, encounter_ist_wert.shape
+                )
+            self.assertSequenceEqual(latent_ist_wert.shape, latent_soll_wert.shape)
+            if not test_latents_only:
+                self.assertTrue(
+                    torch.allclose(encounter_soll_wert, encounter_ist_wert, atol=1e-7)
+                )
+            self.assertTrue(
+                torch.allclose(latent_soll_wert, latent_ist_wert, atol=1e-7)
+            )
+
         # noinspection PyUnresolvedReferences
         ctt = ContactTracingTransformer(num_sabs=1).eval()
-        with torch.no_grad(), ctt.diagnose():
-            output = ctt(batch)
-            padded_output = ctt(padded_batch)
+        _test_model(ctt)
 
-        encounter_soll_wert = output["encounter_variables"][..., 0]
-        encounter_ist_wert = padded_output["encounter_variables"][..., :-pad_size, 0]
-        latent_soll_wert = output["latent_variable"]
-        latent_ist_wert = padded_output["latent_variable"]
-        self.assertSequenceEqual(encounter_soll_wert.shape, encounter_ist_wert.shape)
-        self.assertSequenceEqual(latent_ist_wert.shape, latent_soll_wert.shape)
-        self.assertTrue(
-            torch.allclose(encounter_soll_wert, encounter_ist_wert, atol=1e-7)
-        )
-        self.assertTrue(torch.allclose(latent_soll_wert, latent_ist_wert, atol=1e-7))
+        # noinspection PyUnresolvedReferences
+        ctt = DiurnalContactTracingTransformer().eval()
+        _test_model(ctt, test_latents_only=True)
 
     def test_model_jit(self):
         import torch
