@@ -108,7 +108,7 @@ class TimeEmbedding(nn.Embedding):
         )
 
     def forward(self, timestamps, mask=None):
-        timestamps = timestamps.long().abs()
+        timestamps = timestamps.abs().long()
         if timestamps.dim() == 3:
             timestamps = timestamps[..., 0]
         assert timestamps.dim() == 2
