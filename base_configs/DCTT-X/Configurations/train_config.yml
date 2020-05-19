@@ -84,7 +84,7 @@ tensorboard:
 
 training:
   checkpoint:
-    every: 5
+    every: 2
     if_best: true
   num_epochs: 40
 
