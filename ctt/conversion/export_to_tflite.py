@@ -38,8 +38,8 @@ from tensorflow.python.saved_model import tag_constants
 from ctt.models.transformer import ContactTracingTransformer
 from ctt.data_loading.loader import get_dataloader
 
-NB_EXAMPLES_FOR_SANITY_CHECK = 100
-NB_MESSAGES_BUCKETS = [10, 50, 100, 1000]
+NB_EXAMPLES_FOR_SANITY_CHECK = 10
+NB_MESSAGES_BUCKETS = [100, 300, 1000, 3000, 10000]
 
 def pad_pytorch_tensor(arr, axis, nb_zeroes):
     # Pads pytorch tensor with trailing zeroes across a single dimension
