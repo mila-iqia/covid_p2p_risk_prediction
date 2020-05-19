@@ -2,7 +2,7 @@ import os
 from speedrun import BaseExperiment
 
 from ctt.data_loading.loader import ContactPreprocessor
-from ctt.models.transformer import ContactTracingTransformer
+import ctt.models.transformer as tr
 import torch
 import torch.jit
 
@@ -35,7 +35,8 @@ class InferenceEngine(BaseExperiment):
             model = torch.jit.load(path, map_location=torch.device("cpu"))
         else:
             assert os.path.exists(path)
-            model: torch.nn.Module = ContactTracingTransformer(
+            model_cls = getattr(tr, self.get("model/name", "ContactTracingTransformer"))
+            model: torch.nn.Module = model_cls(
                 **self.get("model/kwargs", {})
             )
             state = torch.load(path, map_location=torch.device("cpu"))
