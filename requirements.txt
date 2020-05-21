@@ -1,5 +1,4 @@
 torch
-unittest
 numpy
 addict
 git+git://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction
