@@ -5,3 +5,6 @@ from ctt.models.transformers.ctt0 import ContactTracingTransformer
 
 # noinspection PyUnresolvedReferences
 from ctt.models.transformers.ctt1 import DiurnalContactTracingTransformer
+
+# noinspection PyUnresolvedReferences
+from ctt.models.transformers.ctt2 import DiurnalContactTracingTransformerV2

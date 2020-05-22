@@ -4,12 +4,12 @@ from itertools import zip_longest
 import torch
 import torch.nn as nn
 
-from ctt.models.transformers.ctt0 import _ContactTracingTransformer
+from ctt.models.transformers.ctt1 import _DiurnalContactTracingTransformer
 import ctt.models.modules as mods
 import ctt.models.attn as attn
 
 
-class _DiurnalContactTracingTransformer(_ContactTracingTransformer):
+class _DiurnalContactTracingTransformerV2(_DiurnalContactTracingTransformer):
     def __init__(
         self,
         *,
@@ -19,6 +19,8 @@ class _DiurnalContactTracingTransformer(_ContactTracingTransformer):
         duration_embedding: nn.Module,
         partner_id_embedding: Union[nn.Module, None],
         message_embedding: nn.Module,
+        encounter_pooler: nn.Module,
+        post_pooling_mlp: nn.Module,
         attention_blocks: nn.ModuleList,
         latent_variable_mlp: nn.Module,
         encounter_mlp: nn.Module,
@@ -36,58 +38,13 @@ class _DiurnalContactTracingTransformer(_ContactTracingTransformer):
         self.duration_embedding = duration_embedding
         self.partner_id_embedding = partner_id_embedding
         self.message_embedding = message_embedding
+        self.encounter_pooler = encounter_pooler
+        self.post_pooling_mlp = post_pooling_mlp
         self.attention_blocks = attention_blocks
         self.latent_variable_mlp = latent_variable_mlp
         self.encounter_mlp = encounter_mlp
         self.entity_masker = entity_masker
         self.partner_id_placeholder = partner_id_placeholder
-
-    def extract_entities(self, inputs, embeddings):
-        # -------- Shape Wrangling --------
-        batch_size = inputs["health_history"].shape[0]
-        num_history_days = inputs["health_history"].shape[1]
-        num_encounters = inputs["encounter_health"].shape[1]
-        # -------- Entity Extraction --------
-        # Assemble the daily entities; these comprise all features of shape BTC and
-        # `health_profile` of shape BC.
-        # To start, expand `health_profile` to BTC from BC.
-        expanded_health_profile_per_day = embeddings["embedded_health_profile"][
-            :, None, :
-        ].expand(
-            batch_size,
-            num_history_days,
-            embeddings["embedded_health_profile"].shape[-1],
-        )
-        # Now, concatenate everything of shape BTC
-        daily_entities = torch.cat(
-            [
-                embeddings["embedded_history_days"],
-                embeddings["embedded_health_history"],
-                expanded_health_profile_per_day,
-            ],
-            dim=-1,
-        )
-        # Assemble the encounter entities. These comprise all features of shape
-        # BMC, and health_profile of shape BC.
-        expanded_health_profile_per_encounter = embeddings["embedded_health_profile"][
-            :, None, :
-        ].expand(
-            batch_size, num_encounters, embeddings["embedded_health_profile"].shape[-1]
-        )
-        encounter_entities = torch.cat(
-            [
-                embeddings["embedded_encounter_day"],
-                embeddings["embedded_encounter_partner_ids"],
-                embeddings["embedded_encounter_duration"],
-                embeddings["embedded_encounter_health"],
-                embeddings["embedded_encounter_messages"],
-                expanded_health_profile_per_encounter,
-            ],
-            dim=-1,
-        )
-        return dict(
-            daily_entities=daily_entities, encounter_entities=encounter_entities,
-        )
 
     def forward(self, inputs: dict) -> Union[dict, tuple]:
         """
@@ -145,40 +102,43 @@ class _DiurnalContactTracingTransformer(_ContactTracingTransformer):
         # -------- Attentions --------
         # Get the daily and encounter-wise entities
         extracted_entities = self.extract_entities(inputs, embeddings)
-        # Assemble the attention masks that prevent coupling between padding or
-        # invalid entities.
+        # Assemble the attention masks. The day-day coupling mask is pretty simple
+        # and as expected:
         day_day_coupling_mask = (
             inputs["valid_history_mask"][:, :, None]
             * inputs["valid_history_mask"][:, None, :]
         )
-        day_encounter_coupling_mask = (
+        # But the coupling between day and encounter is slightly more complicated.
+        # Recall that we want to pool together encounters between the same day.
+        # The mask is therefore a tensor of size BTM, and is 1 if the encounter of
+        # idx m/M happened at day of index t/T (in batch of index b/B).
+        assert inputs["history_days"].shape[-1] == 1
+        # BT1,BM1 -> BT,BM ->BTM
+        day_encounter_coupling_mask = torch.eq(
+            inputs["history_days"], inputs["encounter_day"][:, None, :, 0],
+        ).float()
+        # Additionally, we mask out the invalid entries
+        day_encounter_coupling_mask = day_encounter_coupling_mask * (
             inputs["valid_history_mask"][:, :, None] * inputs["mask"][:, None, :]
         )
-        # Make meta-data that we attach to entities after every layer.
-        meta_data = embeddings["embedded_history_days"]
-        # Achtung!
-        entities = extracted_entities["daily_entities"]
-        # noinspection PyTypeChecker
-        for attention_block in self.attention_blocks:
-            if isinstance(attention_block, (attn.SAB, attn.ISAB, attn.PMA)):
-                # We're doing a self attention
-                entities = attention_block(entities, weights=day_day_coupling_mask)
-            else:
-                # We're doing a cross attention
-                assert isinstance(attention_block, attn.MAB)
-                entities = attention_block(
-                    entities,
-                    extracted_entities["encounter_entities"],
-                    weights=day_encounter_coupling_mask,
-                )
-            # Mask the entities to be suuuper-duper sure that no gradients are
-            # being passed through the masked entities
+        # Attenzione!
+        # Pool encounter entities to get the meta-data
+        pooled_encounter_entities = self.encounter_pooler(
+            extracted_entities["encounter_entities"], day_encounter_coupling_mask
+        )
+        pooled_encounter_entities = self.post_pooling_mlp(pooled_encounter_entities)
+        meta_data = torch.cat(
+            [embeddings["embedded_history_days"], pooled_encounter_entities], dim=-1
+        )
+        entities = torch.cat(
+            [extracted_entities["daily_entities"], pooled_encounter_entities], dim=-1
+        )
+        for sab in self.attention_blocks:
+            entities = sab(entities)
             entities = self.entity_masker(entities, inputs["valid_history_mask"])
-            # Append the meta-data for the next round of message passing
-            entities = torch.cat([meta_data, entities], dim=2)
-        # Now we process the entities with two different MLPs,
-        # where once MLP yields the infectiousness per day and the other MLP yields
-        # whether the individual was infected in a particular day.
+            entities = torch.cat([entities, meta_data], dim=-1)
+        # Now we process the entities with the two MLPs, one for infectiousness
+        # and the other for contagion prediction
         encounter_variables = self.encounter_mlp(entities)
         latent_variable = self.latent_variable_mlp(entities)
         # Done: pack and return
@@ -200,11 +160,7 @@ class _DiurnalContactTracingTransformer(_ContactTracingTransformer):
         return results
 
 
-class DiurnalContactTracingTransformer(_DiurnalContactTracingTransformer):
-    CROSS_ATTENTION_BLOCK_TYPE = "x"
-    SELF_ATTENTION_BLOCK_TYPE = "s"
-    PAD_ATTENTION_BLOCK_TYPE = SELF_ATTENTION_BLOCK_TYPE
-
+class DiurnalContactTracingTransformerV2(_DiurnalContactTracingTransformerV2):
     def __init__(
         self,
         *,
@@ -227,10 +183,10 @@ class DiurnalContactTracingTransformer(_DiurnalContactTracingTransformer):
         message_dim=8,
         message_embedding_dim=128,
         # Attention
+        pooled_encounter_dim=64,
         num_heads=4,
         attention_block_capacity=128,
         num_attention_blocks=2,
-        attention_block_types=CROSS_ATTENTION_BLOCK_TYPE,
         # Output
         encounter_output_features=1,
         latent_variable_output_features=1,
@@ -280,14 +236,15 @@ class DiurnalContactTracingTransformer(_DiurnalContactTracingTransformer):
             dropout=dropout,
         )
         # ------- Attentions -------
-        metadata_dim = time_embedding_dim
-        query_in_dim = (
+        metadata_dim = time_embedding_dim + pooled_encounter_dim
+        daily_in_dim = (
             time_embedding_dim
             + health_history_embedding_dim
             + health_profile_embedding_dim
+            + pooled_encounter_dim
         )
-        query_intermediate_dim = attention_block_capacity + metadata_dim
-        key_in_dim = (
+        daily_intermediate_dim = attention_block_capacity + metadata_dim
+        pooler_in_dim = (
             time_embedding_dim
             + encounter_partner_id_embedding_dim
             + encounter_duration_embedding_dim
@@ -295,58 +252,30 @@ class DiurnalContactTracingTransformer(_DiurnalContactTracingTransformer):
             + message_embedding_dim
             + health_profile_embedding_dim
         )
-        attention_blocks = []
-        for layer_idx, block_type in zip_longest(
-            range(num_attention_blocks), attention_block_types
-        ):
-            if layer_idx is None:
-                continue
-            block_type = (
-                self.PAD_ATTENTION_BLOCK_TYPE if block_type is None else block_type
+        # Make attention pooler
+        encounter_pooler = attn.PMA(
+            dim=pooler_in_dim, num_heads=num_heads, num_seeds=14
+        )
+        post_pooling_mlp = nn.Sequential(
+            nn.Linear(pooler_in_dim, capacity),
+            nn.ReLU(),
+            nn.Linear(capacity, pooled_encounter_dim),
+        )
+        # Make the SABs
+        attention_blocks = [
+            attn.SAB(
+                dim_in=daily_in_dim,
+                dim_out=attention_block_capacity,
+                num_heads=num_heads,
             )
-            if block_type not in [
-                self.CROSS_ATTENTION_BLOCK_TYPE,
-                self.SELF_ATTENTION_BLOCK_TYPE,
-            ]:
-                raise ValueError(
-                    f"`attention_block_types` must be an iterable containing "
-                    f"one of {self.CROSS_ATTENTION_BLOCK_TYPE} (cross attention) "
-                    f"or {self.SELF_ATTENTION_BLOCK_TYPE} (self attention), and"
-                    f" not {block_type}."
-                )
-            if layer_idx == 0:
-                if block_type == self.CROSS_ATTENTION_BLOCK_TYPE:
-                    block = attn.MAB(
-                        dim_Q=query_in_dim,
-                        dim_K=key_in_dim,
-                        dim_V=attention_block_capacity,
-                        num_heads=num_heads,
-                    )
-                elif block_type == self.SELF_ATTENTION_BLOCK_TYPE:
-                    block = attn.SAB(
-                        dim_in=query_in_dim,
-                        dim_out=attention_block_capacity,
-                        num_heads=num_heads,
-                    )
-                else:
-                    raise ValueError("Something is seriously borked if you see this.")
-            else:
-                if block_type == self.CROSS_ATTENTION_BLOCK_TYPE:
-                    block = attn.MAB(
-                        dim_Q=query_intermediate_dim,
-                        dim_K=key_in_dim,
-                        dim_V=attention_block_capacity,
-                        num_heads=num_heads,
-                    )
-                elif block_type == self.SELF_ATTENTION_BLOCK_TYPE:
-                    block = attn.SAB(
-                        dim_in=query_intermediate_dim,
-                        dim_out=attention_block_capacity,
-                        num_heads=num_heads,
-                    )
-                else:
-                    raise ValueError("Something is seriously borked if you see this.")
-            attention_blocks.append(block)
+        ] + [
+            attn.SAB(
+                dim_in=daily_intermediate_dim,
+                dim_out=attention_block_capacity,
+                num_heads=num_heads,
+            )
+            for _ in range(num_attention_blocks - 1)
+        ]
         attention_blocks = nn.ModuleList(attention_blocks)
         # ------- Output processors -------
         # Encounter
@@ -367,14 +296,15 @@ class DiurnalContactTracingTransformer(_DiurnalContactTracingTransformer):
         )
         # ------- Masking -------
         entity_masker = mods.EntityMasker()
-        # Init the super
-        super(DiurnalContactTracingTransformer, self).__init__(
+        super(DiurnalContactTracingTransformerV2, self).__init__(
             health_history_embedding=health_history_embedding,
             health_profile_embedding=health_profile_embedding,
             time_embedding=time_embedding,
             duration_embedding=duration_embedding,
             partner_id_embedding=partner_id_embedding,
             message_embedding=message_embedding,
+            encounter_pooler=encounter_pooler,
+            post_pooling_mlp=post_pooling_mlp,
             attention_blocks=attention_blocks,
             latent_variable_mlp=latent_variable_mlp,
             encounter_mlp=encounter_mlp,
