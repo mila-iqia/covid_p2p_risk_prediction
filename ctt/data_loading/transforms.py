@@ -60,17 +60,28 @@ class QuantizedGaussianMessageNoise(Transform):
         assert (
             encounter_message.shape[-1] == 1
         ), "Noising is only supported for float encoded messages."
-        # Sample noise level
-        noise = torch.round(
-            torch.randn(
-                tuple(encounter_message.shape),
-                dtype=encounter_message.dtype,
-                device=encounter_message.device,
+        if self.noise_std == 0:
+            # Shortcut path where we don't add any noise
+            return input_dict
+        elif self.noise_std == -1:
+            # Shortcut path where we zero-out the messages
+            # (for the purpose of ensuring that the training uses the messages)
+            input_dict["encounter_message"] = encounter_message * 0.0
+            return input_dict
+        else:
+            # Sample noise level
+            noise = torch.round(
+                torch.randn(
+                    tuple(encounter_message.shape),
+                    dtype=encounter_message.dtype,
+                    device=encounter_message.device,
+                )
+                * self.noise_std
+            ) * (1 / (self.num_risk_levels - 1))
+            input_dict["encounter_message"] = torch.clamp(
+                encounter_message + noise, 0, 1
             )
-            * self.noise_std
-        ) * (1 / (self.num_risk_levels - 1))
-        input_dict["encounter_message"] = torch.clamp(encounter_message + noise, 0, 1)
-        return input_dict
+            return input_dict
 
 
 class FractionalEncounterDurationNoise(Transform):
