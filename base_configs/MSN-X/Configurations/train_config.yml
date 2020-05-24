@@ -1,24 +1,35 @@
 data:
-  paths:
-    train:
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-0_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-1_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-2_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-3_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-4_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-5_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-6_20200430-012202-output.zip"
-    validate:
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-7_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-8_20200430-012202-output.zip"
-      - "./data/1k_app_0.5/sim_v2_people-1000_days-60_init-0.01_seed-9_20200430-012202-output.zip"
   loader_kwargs:
     batch_size: 64
-    shuffle: true
-    num_workers: 8      # Set this to match the resources you have available
-    relative_days: true
+    bit_encoded_messages: false
     clip_history_days: false
-    preload: true      # Set this to true if you have 16GB+ of RAM
+    num_workers: 8
+    preload: true
+    relative_days: true
+    shuffle: true
+  paths:
+    train:
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-1_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-2_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-3_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-4_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-5_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-6_20200509-182246-output.zip
+    validate:
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-7_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-8_20200509-182246-output.zip
+      - ./data/1k_app_1_v3/sim_v2_people-1000_days-30_init-0.003_seed-9_20200509-182246-output.zip
+  transforms:
+    train:
+      kwargs:
+        FractionalEncounterDurationNoise:
+          fractional_noise: 0.01
+        QuantizedGaussianMessageNoise:
+          noise_std: 0.5
+      names:
+      - QuantizedGaussianMessageNoise
+      - FractionalEncounterDurationNoise
 
 model:
   name: MixSetNet
@@ -52,31 +63,32 @@ model:
 
 losses:
   kwargs:
-    infectiousness: {}
     contagion:
       allow_multiple_exposures: true
+    infectiousness: {}
   weights:
-    infectiousness: 1.
-    contagion: 1.
+    contagion: 0.7
+    infectiousness: 1.0
 
 optim:
-  name: "WarmCosineAdam"
   kwargs:
+    eta_max: 0.0008
+    eta_min: 8.0e-06
     num_steps: 100000
     num_warmup_steps: 5000
-    eta_min: 0.000008
-    eta_max: 0.0008
-
-training:
-  num_epochs: 40
-  checkpoint:
-    every: 5
-    if_best: true
-    save_trace: true
-
-wandb:
-  use: false
-  log_every: 50
+    weight_decay: 1.0e-05
+  name: WarmCosineAdam
 
 tensorboard:
   log_scalars_every: 10
+
+training:
+  checkpoint:
+    every: 2
+    if_best: true
+    early_stopping_metric: validation_infectiousness
+  num_epochs: 40
+
+wandb:
+  log_every: 50
+  use: true
