@@ -16,6 +16,7 @@ class Tests(unittest.TestCase):
             ContactTracingTransformer,
             DiurnalContactTracingTransformer,
             DiurnalContactTracingTransformerV2,
+            MixSetNet,
         )
         from addict import Dict
 
@@ -51,6 +52,12 @@ class Tests(unittest.TestCase):
         ctt = DiurnalContactTracingTransformerV2()
         test_output(ctt)
 
+        ctt = DiurnalContactTracingTransformerV2()
+        test_output(ctt)
+
+        ctt = MixSetNet()
+        test_output(ctt)
+
     def test_model_padding(self):
         import torch
         from ctt.data_loading.loader import ContactDataset
@@ -58,7 +65,8 @@ class Tests(unittest.TestCase):
         from ctt.models.transformer import (
             ContactTracingTransformer,
             DiurnalContactTracingTransformer,
-            DiurnalContactTracingTransformerV2
+            DiurnalContactTracingTransformerV2,
+            MixSetNet
         )
 
         torch.random.manual_seed(43)
@@ -126,6 +134,9 @@ class Tests(unittest.TestCase):
         ctt = DiurnalContactTracingTransformerV2().eval()
         # FIXME Understand why we need atol this large.
         _test_model(ctt, test_latents_only=True, atol=1e-4)
+
+        ctt = MixSetNet().eval()
+        _test_model(ctt)
 
     def test_model_jit(self):
         import torch

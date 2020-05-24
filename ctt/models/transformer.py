@@ -8,3 +8,6 @@ from ctt.models.transformers.ctt1 import DiurnalContactTracingTransformer
 
 # noinspection PyUnresolvedReferences
 from ctt.models.transformers.ctt2 import DiurnalContactTracingTransformerV2
+
+# noinspection PyUnresolvedReferences
+from ctt.models.transformers.msn import MixSetNet

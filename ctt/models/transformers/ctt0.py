@@ -247,13 +247,9 @@ class _ContactTracingTransformer(nn.Module):
         # Make a mask for the attention mech. This mask prevents attention between
         # two entities if either one of them is a padding entity.
         attention_mask = expanded_mask[:, :, None] * expanded_mask[:, None, :]
-        # Let'er rip!
-        # noinspection PyTypeChecker
-        for sab in self.self_attention_blocks:
-            entities = sab(entities, weights=attention_mask)
-            entities = self.entity_masker(entities, expanded_mask)
-            # Append meta-data for the next round of message passing
-            entities = torch.cat([meta_data, entities], dim=2)
+        entities = self._attention_loop(
+            entities, meta_data, attention_mask, expanded_mask
+        )
         # -------- Latent Variables
         pre_latent_variable = self._get_pre_latent_variable(entities, num_encounters)
         # Push through the latent variable MLP to get the latent variables
@@ -297,6 +293,22 @@ class _ContactTracingTransformer(nn.Module):
         results = dict()
         results["encounter_variables"], results["latent_variable"] = output_tuple
         return results
+
+    def _attention_loop(
+        self,
+        entities: torch.Tensor,
+        meta_data: torch.Tensor,
+        attention_mask: torch.Tensor,
+        expanded_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        # Let'er rip!
+        # noinspection PyTypeChecker
+        for sab in self.self_attention_blocks:
+            entities = sab(entities, weights=attention_mask)
+            entities = self.entity_masker(entities, expanded_mask)
+            # Append meta-data for the next round of message passing
+            entities = torch.cat([meta_data, entities], dim=2)
+        return entities
 
     @staticmethod
     @torch.jit.script
