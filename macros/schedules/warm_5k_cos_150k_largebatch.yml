@@ -13,4 +13,4 @@ optim:
   name: WarmCosineAdam
 
 training:
-  num_epochs: 20
+  num_epochs: 80
