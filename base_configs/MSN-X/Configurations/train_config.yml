@@ -86,7 +86,7 @@ training:
   checkpoint:
     every: 2
     if_best: true
-    early_stopping_metric: validation_infectiousness
+    early_stopping_metric: infectiousness
   num_epochs: 40
 
 wandb:
