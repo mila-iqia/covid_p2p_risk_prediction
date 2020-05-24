@@ -137,9 +137,13 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         )
         all_losses_and_metrics.update(Dict(self.metrics.evaluate()))
         self.log_validation_losses_and_metrics(all_losses_and_metrics)
+        early_stopping_metric = all_losses_and_metrics[
+            self.get("training/checkpoint/early_stopping_metric", "loss")
+        ]
         # Store the validation loss in cache. This will be used for checkpointing.
         self.write_to_cache("current_validation_metrics", all_losses_and_metrics)
         self.write_to_cache("current_validation_loss", all_losses_and_metrics.loss)
+        self.write_to_cache("current_early_stopping_metric", early_stopping_metric)
         return all_losses_and_metrics
 
     def log_training_losses(self, losses):
@@ -160,18 +164,20 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
             self._write_checkpoint(self.checkpoint_path)
         if self.get("training/checkpoint/if_best", True):
             # Save a checkpoint if the validation loss is better than best
-            self.checkpoint_if_best_validation_loss()
+            self.checkpoint_if_best()
         return self
 
-    def checkpoint_if_best_validation_loss(self):
-        current_validation_loss = self.read_from_cache(
-            "current_validation_loss", float("inf")
+    def checkpoint_if_best(self):
+        current_early_stopping_metric = self.read_from_cache(
+            "current_early_stopping_metric", float("inf")
         )
-        best_validation_loss = self.read_from_cache(
-            "best_validation_loss", float("inf")
+        best_early_stopping_metric = self.read_from_cache(
+            "best_early_stopping_metric", float("inf")
         )
-        if current_validation_loss < best_validation_loss:
-            self.write_to_cache("best_validation_loss", current_validation_loss)
+        if current_early_stopping_metric < best_early_stopping_metric:
+            self.write_to_cache(
+                "best_early_stopping_metric", current_early_stopping_metric
+            )
             ckpt_path = os.path.join(self.checkpoint_directory, "best.ckpt")
             self._write_checkpoint(ckpt_path)
         return self
@@ -182,14 +188,15 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
             if self._dummy_sample is None:
                 # getting a single minibatch from the data loader might be pretty slow, but
                 # we don't have a choice if we want to trace the model...
-                #self._dummy_sample = next(iter(self.train_loader))
+                # self._dummy_sample = next(iter(self.train_loader))
                 with open("/tmp/batch.pkl", "rb") as fd:
                     import pickle
+
                     self._dummy_sample = pickle.load(fd)
             self.model.eval()
             with self.model.output_as_tuple():
                 test_output = self.model(self._dummy_sample)
-                trace = torch.jit.trace(self.model, (self._dummy_sample, ), )
+                trace = torch.jit.trace(self.model, (self._dummy_sample,),)
             trace.save(ckpt_path + ".trace")
         info_dict = {
             "model": self.model.state_dict(),
@@ -205,8 +212,9 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
             ckpt_path,
             map_location=torch.device((self.device if device is None else device)),
         )
-        assert isinstance(info_dict, (dict, Dict)), \
-            "checkpoint did not contain object map; are you trying to reload a trace?"
+        assert isinstance(
+            info_dict, (dict, Dict)
+        ), "checkpoint did not contain object map; are you trying to reload a trace?"
         self.model.load_state_dict(info_dict["model"])
         self.optim.load_state_dict(info_dict["optim"])
         return self
