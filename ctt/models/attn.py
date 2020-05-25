@@ -142,6 +142,9 @@ class SRB(nn.Module):
                 # that here.
                 normalizer = num_entities / mask.sum(1).float()
                 global_features = global_features * normalizer[:, None, None]
+        elif self.aggregation == "none":
+            # Do not aggregate 
+            pass
         else:
             raise NotImplementedError
         Y = F.relu(self.fc_f(torch.cat([X, global_features], dim=-1))) + X
