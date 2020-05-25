@@ -58,6 +58,9 @@ class Tests(unittest.TestCase):
         ctt = MixSetNet()
         test_output(ctt)
 
+        ctt = MixSetNet(srb_aggregation="mean")
+        test_output(ctt)
+
     def test_model_padding(self):
         import torch
         from ctt.data_loading.loader import ContactDataset

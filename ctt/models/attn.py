@@ -140,7 +140,7 @@ class SRB(nn.Module):
                 # However, some of those M entities may have been padding and
                 # accordingly set to 0. This affects the mean, so we undo
                 # that here.
-                normalizer = num_entities / mask.sum(1)
+                normalizer = num_entities / mask.sum(1).float()
                 global_features = global_features * normalizer[:, None, None]
         else:
             raise NotImplementedError
