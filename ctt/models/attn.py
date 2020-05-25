@@ -107,7 +107,7 @@ class SRB(nn.Module):
 
     def forward(self, X, weights=None):
         if weights is not None:
-            mask = weights.gt(0.0)
+            mask = weights.gt(0.0).long()
         else:
             mask = None
         num_entities = X.shape[1]
@@ -115,7 +115,7 @@ class SRB(nn.Module):
         if self.aggregation == "max":
             if mask is not None:
                 global_features = global_features.masked_fill(
-                    (~mask)[..., None].expand_as(global_features), -float("inf")
+                    (1 - mask)[..., None].expand_as(global_features), -float("inf")
                 )
             global_features = global_features.max(1, keepdim=True).values.repeat(
                 1, num_entities, 1
@@ -123,7 +123,7 @@ class SRB(nn.Module):
         elif self.aggregation == "sum":
             if mask is not None:
                 global_features = global_features.masked_fill(
-                    (~mask)[..., None].expand_as(global_features), 0.0
+                    (1 - mask)[..., None].expand_as(global_features), 0.0
                 )
             global_features = global_features.sum(1, keepdim=True).repeat(
                 1, num_entities, 1
@@ -131,7 +131,7 @@ class SRB(nn.Module):
         elif self.aggregation == "mean":
             if mask is not None:
                 global_features = global_features.masked_fill(
-                    (~mask)[..., None].expand_as(global_features), 0.0
+                    (1 - mask)[..., None].expand_as(global_features), 0.0
                 )
             global_features = global_features.mean(1, keepdim=True).repeat(
                 1, num_entities, 1
