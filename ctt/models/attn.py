@@ -8,6 +8,7 @@ import math
 
 class MAB(nn.Module):
     EPS = 1e-7
+    TF_COMPAT = False
 
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
         super(MAB, self).__init__()
@@ -33,7 +34,7 @@ class MAB(nn.Module):
         A = self._compute_attention_weights(Q_, K_, weights)
         # funky split spaghetti to avoid pytorch call overload issues
         split_size = Q.shape[0]
-        if not isinstance(split_size, torch.Tensor):
+        if not isinstance(split_size, torch.Tensor) and not self.TF_COMPAT:
             split_size = torch.IntTensor([split_size])[0]
         # split will still throw a tracing warning, but we can't avoid the int conversion...
         O = torch.cat(super(torch.Tensor, Q_ + A.bmm(V_)).split(split_size, dim=0), 2)
@@ -143,7 +144,7 @@ class SRB(nn.Module):
                 normalizer = num_entities / mask.sum(1).float()
                 global_features = global_features * normalizer[:, None, None]
         elif self.aggregation == "none":
-            # Do not aggregate 
+            # Do not aggregate
             pass
         else:
             raise NotImplementedError
