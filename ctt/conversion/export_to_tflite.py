@@ -37,6 +37,7 @@ from tensorflow.python.saved_model import tag_constants
 
 from ctt.models.transformer import ContactTracingTransformer
 from ctt.data_loading.loader import get_dataloader
+from ctt.models.attn import MAB
 
 NB_EXAMPLES_FOR_SANITY_CHECK = 10
 NB_MESSAGES_BUCKETS = [100, 300, 1000, 3000, 10000]
@@ -115,6 +116,19 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
         input_names.append(i)
     output_names = ['encounter_variables', 'latent_variable']
 
+    """ The following line is required because the multi-head attention has
+    two possible paths during the forward pass. Both paths should give the
+    same numerical results.
+    - One path uses the split() function on non-constant inputs. This is
+      required to have access to the transformer trace. This path, however,
+      results in errors when exporting to ONNX.
+    - The other path uses the split() function on constant inputs. This path
+      is compatible with the export function to ONNX.
+    To solve the issue, to set MAB.TF_COMPAT=True before doing the export to
+    ONNX.
+    """
+    MAB.TF_COMPAT = True
+
     # Convert PyTorch model to ONNX format
     onnx_model_path = os.path.join(working_directory, "model_onnx_10.onnx")
     torch.onnx.export(pytorch_model,
@@ -125,6 +139,7 @@ def convert_pytorch_model_fixed_messages(pytorch_model, nb_messages,
                       do_constant_folding=True,
                       input_names=input_names,
                       output_names=output_names)
+    MAB.TF_COMPAT = False
 
     # Load ONNX model and convert to TF model
     onnx_model = onnx.load(onnx_model_path)
