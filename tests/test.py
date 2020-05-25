@@ -61,6 +61,36 @@ class Tests(unittest.TestCase):
         ctt = MixSetNet(srb_aggregation="mean")
         test_output(ctt)
 
+    def test_tf_compat(self):
+        import torch
+        from ctt.data_loading.loader import ContactDataset
+        from torch.utils.data import DataLoader
+        from ctt.models.transformer import ContactTracingTransformer
+        from ctt.models.attn import MAB
+        from addict import Dict
+
+        batch_size = 5
+        path = self.DATASET_PATH
+        dataset = ContactDataset(path)
+        dataloader = DataLoader(
+            dataset, batch_size=batch_size, collate_fn=ContactDataset.collate_fn
+        )
+        batch = next(iter(dataloader))
+
+        ctt = ContactTracingTransformer()
+        ctt.eval()
+
+        MAB.TF_COMPAT = False
+        output_no_compat = ctt(batch)
+
+        MAB.TF_COMPAT = True
+        output_tf_compat = ctt(batch)
+
+        for key in output_no_compat:
+            self.assertTrue(
+                torch.allclose(output_no_compat[key], output_tf_compat[key])
+            )
+
     def test_model_padding(self):
         import torch
         from ctt.data_loading.loader import ContactDataset
@@ -69,7 +99,7 @@ class Tests(unittest.TestCase):
             ContactTracingTransformer,
             DiurnalContactTracingTransformer,
             DiurnalContactTracingTransformerV2,
-            MixSetNet
+            MixSetNet,
         )
 
         torch.random.manual_seed(43)
