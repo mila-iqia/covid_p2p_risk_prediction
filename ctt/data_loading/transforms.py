@@ -90,14 +90,18 @@ class FractionalEncounterDurationNoise(Transform):
 
     def apply(self, input_dict: Dict) -> Dict:
         encounter_duration = input_dict["encounter_duration"]
-        fractional_noise = 1 + (
-            torch.randn(
-                tuple(encounter_duration.shape),
-                dtype=encounter_duration.dtype,
-                device=encounter_duration.device,
-            )
-            * self.fractional_noise
-        ).clamp_min(0)
+        if self.fractional_noise == -1:
+            # Special codepath to remove encounter duration from the input.
+            fractional_noise = 0.
+        else:
+            fractional_noise = 1 + (
+                torch.randn(
+                    tuple(encounter_duration.shape),
+                    dtype=encounter_duration.dtype,
+                    device=encounter_duration.device,
+                )
+                * self.fractional_noise
+            ).clamp_min(0)
         input_dict["encounter_duration"] = encounter_duration * fractional_noise
         return input_dict
 
@@ -105,6 +109,17 @@ class FractionalEncounterDurationNoise(Transform):
 # ------------------------------
 # ------- Pre-Transforms -------
 # ------------------------------
+
+
+class EncounterDropout(PreTransform):
+    def __init__(self, dropout_proba=0.5):
+        self.dropout_proba = dropout_proba
+
+    def apply(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ) -> dict:
+        # TODO
+        pass
 
 
 class ClusteringNoise(PreTransform):
