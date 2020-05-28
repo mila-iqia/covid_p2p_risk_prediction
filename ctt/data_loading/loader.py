@@ -41,8 +41,8 @@ class ContactDataset(Dataset):
         "human_idx": ["human_idx", slice(None)],
         "day_idx": ["day_idx", slice(None)],
         "health_history": ["health_history", slice(None)],
-        "reported_symptoms": ["health_history", slice(0, 28)],
-        "test_results": ["health_history", slice(28, 29)],
+        "reported_symptoms": ["health_history", slice(0, 27)],
+        "test_results": ["health_history", slice(27, 28)],
         "age": ["health_profile", slice(0, 1)],
         "sex": ["health_profile", slice(1, 2)],
         "preexisting_conditions": ["health_profile", slice(2, 12)],
@@ -50,8 +50,8 @@ class ContactDataset(Dataset):
         "valid_history_mask": ["valid_history_mask", slice(None)],
         "current_compartment": ["current_compartment", slice(None)],
         "infectiousness_history": ["infectiousness_history", slice(None)],
-        "reported_symptoms_at_encounter": ["encounter_health", slice(0, 28)],
-        "test_results_at_encounter": ["encounter_health", slice(28, 29)],
+        "reported_symptoms_at_encounter": ["encounter_health", slice(0, 27)],
+        "test_results_at_encounter": ["encounter_health", slice(27, 28)],
         "encounter_message": ["encounter_message", slice(None)],
         "encounter_partner_id": ["encounter_partner_id", slice(None)],
         "encounter_duration": ["encounter_duration", slice(None)],
@@ -139,16 +139,12 @@ class ContactDataset(Dataset):
             with zipfile.ZipFile(self.path) as zf:
                 files = zipfile.ZipFile.namelist(zf)
 
+        # Filter to keep only the pickles
+        files = [f for f in files if f.endswith(".pkl")]
+
         def extract_components(file):
-            components = file[:-8].split("-")
-            components.remove("daily_human")
-            if len(components) == 4:
-                # This can happen for a file-name like -1-100.pkl, which means
-                # that the first idx is negative.
-                return [-int(components[1]), int(components[2])]
-            else:
-                assert len(components) == 3
-                return [int(c) for c in components[:2]]
+            components = file.split("/")[-3:]
+            return int(components[0]), int(components[1])
 
         day_idxs, human_idxs = zip(
             *[
@@ -167,8 +163,9 @@ class ContactDataset(Dataset):
         self._num_days = max(day_idxs) - self._day_idx_offset + 1
         self._num_humans = max(human_idxs) - self._human_idx_offset + 1
         # Compute number of slots / day
-        _find_slots = lambda x: x.startswith(
-            f"{self._day_idx_offset}-{self._human_idx_offset}-daily_human"
+        _find_slots = (
+            lambda x: f"daily_outputs/{self._day_idx_offset}/"
+            f"{self._human_idx_offset}/daily_human-" in x
         )
         self._num_slots = len(list(filter(_find_slots, files)))
         assert self._num_slots > 0
@@ -195,9 +192,11 @@ class ContactDataset(Dataset):
         assert human_idx < self.num_humans
         assert day_idx < self.num_days
         assert slot_idx < self.num_slots
-        _find_slots = lambda x: x.startswith(
-            f"{day_idx + self._day_idx_offset}-{human_idx + self._human_idx_offset}-daily_human"
+        _find_slots = (
+            lambda x: f"daily_outputs/{day_idx + self._day_idx_offset}/"
+            f"{human_idx + self._human_idx_offset}/daily_human-" in x
         )
+
         all_slots = sorted(list(filter(_find_slots, self._files)))
         try:
             return all_slots[slot_idx]
@@ -215,13 +214,15 @@ class ContactDataset(Dataset):
                 return random.choice(all_slots)
 
     def _parse_file(self, file_name):
-        components = file_name[:-8].split("-")
+        components = file_name.split("/")[-3:]
         # components[2] is always "daily-human", if you're wondering
         day_idx, human_idx, slot_idx = (
             int(components[0]),
             int(components[1]),
-            int(components[3]),
+            int(components[2].strip("daily_human-.pkl")),
         )
+        day_idx -= self._day_idx_offset
+        human_idx -= self._human_idx_offset
         return day_idx, human_idx, slot_idx
 
     def __len__(self):
@@ -273,8 +274,8 @@ class ContactDataset(Dataset):
         -------
         Dict
             An addict with the following attributes:
-                -> `health_history`: 14-day health history of self of shape (14, 29)
-                        with channels `reported_symptoms` (28), `test_results`(1).
+                -> `health_history`: 14-day health history of self of shape (14, 28)
+                        with channels `reported_symptoms` (27), `test_results`(1).
                 -> `health_profile`: health profile of the individual,
                     of shape (12,), containing channels `age` (1), `sex` (1), and
                     `preexisting_conditions` (10,). Note that `age` is a float taking
@@ -293,7 +294,7 @@ class ContactDataset(Dataset):
                     of shape (4,).
                 -> `infectiousness_history`: 14-day history of infectiousness,
                     of shape (14, 1).
-                -> `encounter_health`: health during encounter, of shape (M, 13)
+                -> `encounter_health`: health during encounter, of shape (M, 28)
                 -> `encounter_message`: risk transmitted during encounter,
                         of shape (M, 8) if `self.bit_encoded_messages` is set to True,
                         of shape (M, 1) otherwise.
@@ -322,12 +323,13 @@ class ContactDataset(Dataset):
         # FIXME This is a hack:
         #  Filter encounter_info
         if encounter_info.size == 0:
-            raise InvalidSetSize
-        valid_encounter_mask = encounter_info[:, 3] > (day_idx - 14)
-        encounter_info = encounter_info[valid_encounter_mask]
-        # Check again
-        if encounter_info.size == 0:
-            raise InvalidSetSize
+            encounter_info = encounter_info.reshape(0, 4)
+        num_encounters = encounter_info.shape[0]
+        if num_encounters > 0:
+            valid_encounter_mask = encounter_info[:, 3] > (day_idx - 14)
+            encounter_info = encounter_info[valid_encounter_mask]
+        else:
+            valid_encounter_mask = np.ones((0,), dtype="bool")
         assert encounter_info.shape[1] == 4
         (
             encounter_partner_id,
@@ -340,15 +342,19 @@ class ContactDataset(Dataset):
             encounter_info[:, 2],
             encounter_info[:, 3],
         )
-        num_encounters = encounter_info.shape[0]
-        # Convert partner-id's to binary (shape = (M, num_id_bits))
-        encounter_partner_id = (
-            np.unpackbits(
-                encounter_partner_id.astype(f"uint{self._num_id_bits}").view("uint8")
+        if num_encounters > 0:
+            # Convert partner-id's to binary (shape = (M, num_id_bits))
+            encounter_partner_id = (
+                np.unpackbits(
+                    encounter_partner_id.astype(f"uint{self._num_id_bits}").view(
+                        "uint8"
+                    )
+                )
+                .reshape(num_encounters, self._num_id_bits)
+                .astype("float32")
             )
-            .reshape(num_encounters, -1)
-            .astype("float32")
-        )
+        else:
+            encounter_partner_id = np.zeros((0, self._num_id_bits)).astype("float32")
         # Convert risk
         encounter_message = self._fetch_encounter_message(
             encounter_message, num_encounters
@@ -370,10 +376,15 @@ class ContactDataset(Dataset):
         history_days = np.arange(day_idx - 13, day_idx + 1)[::-1, None]
         valid_history_mask = (history_days >= 0)[:, 0]
         # Get historical health info given the day of encounter (shape = (M, 13))
-        encounter_at_historical_day_idx = np.argmax(
-            encounter_day == history_days, axis=0
-        )
-        health_at_encounter = health_history[encounter_at_historical_day_idx, :]
+        if num_encounters > 0:
+            encounter_at_historical_day_idx = np.argmax(
+                encounter_day == history_days, axis=0
+            )
+            health_at_encounter = health_history[encounter_at_historical_day_idx, :]
+        else:
+            health_at_encounter = np.zeros(
+                (0, health_history.shape[-1]), dtype=health_history.dtype
+            )
         # Get current epidemiological compartment
         currently_infected = infectiousness_history[0, 0] > 0.0
         if human_day_info["unobserved"]["is_recovered"]:
@@ -451,6 +462,9 @@ class ContactDataset(Dataset):
             return np.zeros(shape=(valid_encounter_mask.shape[0],))[
                 valid_encounter_mask, None
             ].astype("float32")
+        elif valid_encounter_mask.shape[0] == 0:
+            # Empty tensor
+            return np.zeros((0, 1)).astype("float32")
         else:
             return human_day_info["unobserved"]["exposure_encounter"][
                 valid_encounter_mask, None
@@ -470,18 +484,26 @@ class ContactDataset(Dataset):
 
     def _fetch_encounter_message(self, encounter_message, num_encounters):
         if self.bit_encoded_messages:
-            # Convert to bit-vector
-            return (
-                np.unpackbits(encounter_message.astype("uint8"))
-                .reshape(num_encounters, -1)
-                .astype("float32")
-            )
+            if encounter_message.shape[0] == 0:
+                # Empty message tensor
+                return np.zeros((0, 8))
+            else:
+                # Convert to bit-vector
+                return (
+                    np.unpackbits(encounter_message.astype("uint8"))
+                    .reshape(num_encounters, -1)
+                    .astype("float32")
+                )
         else:
-            # max-min normalize message
-            return (
-                (encounter_message[:, None] - self.ASSUMED_MIN_RISK)
-                / (self.ASSUMED_MAX_RISK - self.ASSUMED_MIN_RISK)
-            ).astype("float32")
+            if encounter_message.shape[0] == 0:
+                # Empty message tensor
+                return np.zeros((0, 1))
+            else:
+                # max-min normalize message
+                return (
+                    (encounter_message[:, None] - self.ASSUMED_MIN_RISK)
+                    / (self.ASSUMED_MAX_RISK - self.ASSUMED_MIN_RISK)
+                ).astype("float32")
 
     def __getitem__(self, item):
         while True:
