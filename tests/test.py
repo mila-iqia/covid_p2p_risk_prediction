@@ -5,7 +5,8 @@ class Tests(unittest.TestCase):
 
     DATASET_PATH = (
         ZIP_PATH
-    ) = "../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509-182246-output.zip"
+    ) = "../data/payload/sim_v2_people-1000_days-22_init-0.001_seed-2_20200527-214120.zip"
+    DATASET_DIR_PATH = "../data/payload"
     EXP_DIR = "/Users/nrahaman/Python/ctt/tmp/CTT-SHIPMENT-0"
     NUM_KEYS_IN_BATCH = 15
 
@@ -260,6 +261,14 @@ class Tests(unittest.TestCase):
         )
         batch = next(iter(dataloader))
 
+        dataloader = get_dataloader(
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0,
+            path=self.DATASET_DIR_PATH,
+        )
+        batch = next(iter(dataloader))
+
     def test_loader_with_multiprocessing(self):
         from ctt.data_loading.loader import get_dataloader
 
@@ -276,7 +285,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(len(batch[key]), batch_size)
 
     def test_dataset(self):
-        from ctt.data_loading.loader import ContactDataset
+        from ctt.data_loading.loader import ContactDataset, InvalidSetSize
         from addict import Dict
 
         path = self.DATASET_PATH
@@ -296,7 +305,7 @@ class Tests(unittest.TestCase):
                 dataset.extract(
                     dataset, sample, "reported_symptoms_at_encounter"
                 ).shape[-1],
-                28,
+                27,
             )
             self.assertEqual(
                 dataset.extract(dataset, sample, "test_results_at_encounter").shape[-1],

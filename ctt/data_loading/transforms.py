@@ -57,6 +57,9 @@ class QuantizedGaussianMessageNoise(Transform):
 
     def apply(self, input_dict: Dict) -> Dict:
         encounter_message = input_dict["encounter_message"]
+        if encounter_message.shape[0] == 0:
+            # No encounter messages, so nothing to do.
+            return input_dict
         assert (
             encounter_message.shape[-1] == 1
         ), "Noising is only supported for float encoded messages."
@@ -90,6 +93,9 @@ class FractionalEncounterDurationNoise(Transform):
 
     def apply(self, input_dict: Dict) -> Dict:
         encounter_duration = input_dict["encounter_duration"]
+        if encounter_duration.shape[0] == 0:
+            # no encounters, nothing to do
+            return input_dict
         if self.fractional_noise == -1:
             # Special codepath to remove encounter duration from the input.
             fractional_noise = 0.
