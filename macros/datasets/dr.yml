@@ -1,0 +1,4 @@
+data:
+  paths:
+    train: "./data/dr/train"
+    validate: "./data/dr/val"

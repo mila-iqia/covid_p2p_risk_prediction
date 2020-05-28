@@ -643,7 +643,7 @@ class ContactPreprocessor(ContactDataset):
         raise NotImplementedError
 
 
-def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
+def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_kwargs):
     path = dataset_kwargs.pop("path")
     num_datasets_to_select = dataset_kwargs.pop("num_datasets_to_select", None)
     if isinstance(path, str):
@@ -653,7 +653,8 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
             # selected.
             paths = [p for p in os.listdir(path) if p.endswith(".zip")]
             if num_datasets_to_select is not None:
-                paths = np.random.choice(
+                rng = np.random.RandomState() if rng is None else rng
+                paths = rng.choice(
                     paths,
                     num_datasets_to_select,
                     replace=num_datasets_to_select > len(paths),

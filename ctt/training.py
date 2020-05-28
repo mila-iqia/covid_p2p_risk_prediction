@@ -45,21 +45,29 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
             model_cls(**self.get("model/kwargs", {})), self.device
         )
 
-    def _build_loaders(self):
+    def _build_train_loader(self):
         train_path = self.get("data/paths/train", ensure_exists=True)
         train_transforms = get_transforms(self.get("data/transforms/train", {}))
-        validate_path = self.get("data/paths/validate", ensure_exists=True)
-        validate_transforms = get_transforms(self.get("data/transforms/validate", {}))
         self.train_loader = get_dataloader(
             path=train_path,
             transforms=train_transforms,
+            rng=np.random.RandomState(self.epoch),
             **self.get("data/loader_kwargs", ensure_exists=True),
         )
+
+    def _build_validate_loader(self):
+        validate_path = self.get("data/paths/validate", ensure_exists=True)
+        validate_transforms = get_transforms(self.get("data/transforms/validate", {}))
         self.validate_loader = get_dataloader(
             path=validate_path,
             transforms=validate_transforms,
+            rng=np.random.RandomState(self.epoch),
             **self.get("data/loader_kwargs", ensure_exists=True),
         )
+
+    def _build_loaders(self):
+        self._build_train_loader()
+        self._build_validate_loader()
 
     def _build_criteria_and_optim(self):
         # noinspection PyArgumentList
@@ -72,6 +80,12 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         # Set up an epoch-wise scheduler here if you want to, but the
         # recommendation is to use the one defined in opts.
         self.scheduler = None
+
+    def refresh_loader_if_required(self):
+        # Refresh only if we need to
+        if self.get("data/loader_kwargs/num_datasets_to_select", None) is not None:
+            del self.train_loader
+            self._build_train_loader()
 
     @property
     def device(self):
@@ -89,6 +103,7 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
             self.checkpoint()
             self.log_progress("epochs", **validation_stats)
             self.step_scheduler(epoch)
+            self.refresh_loader_if_required()
             self.next_epoch()
 
     def train_epoch(self):
