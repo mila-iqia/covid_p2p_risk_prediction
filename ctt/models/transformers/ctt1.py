@@ -211,7 +211,7 @@ class DiurnalContactTracingTransformer(_DiurnalContactTracingTransformer):
         # Embeddings
         capacity=128,
         dropout=0.1,
-        num_health_history_features=29,
+        num_health_history_features=28,
         health_history_embedding_dim=64,
         num_health_profile_features=12,
         health_profile_embedding_dim=32,
