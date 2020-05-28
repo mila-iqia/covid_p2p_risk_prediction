@@ -74,6 +74,9 @@ class ContactDataset(Dataset):
     DEFAULT_ENCOUNTER_DURATION = 10
     DEFAULT_PREEXISTING_CONDITIONS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
+    # Behaviour
+    RAISE_IF_NO_ENCOUNTERS = False
+
     def __init__(
         self,
         path: str,
@@ -325,6 +328,8 @@ class ContactDataset(Dataset):
         if encounter_info.size == 0:
             encounter_info = encounter_info.reshape(0, 4)
         num_encounters = encounter_info.shape[0]
+        if num_encounters == 0 and self.RAISE_IF_NO_ENCOUNTERS:
+            raise InvalidSetSize
         if num_encounters > 0:
             valid_encounter_mask = encounter_info[:, 3] > (day_idx - 14)
             encounter_info = encounter_info[valid_encounter_mask]
@@ -640,9 +645,33 @@ class ContactPreprocessor(ContactDataset):
 
 def get_dataloader(batch_size, shuffle=True, num_workers=1, **dataset_kwargs):
     path = dataset_kwargs.pop("path")
+    num_datasets_to_select = dataset_kwargs.pop("num_datasets_to_select", None)
     if isinstance(path, str):
-        dataset = ContactDataset(path=path, **dataset_kwargs)
+        if os.path.isdir(path):
+            # This code-path supports the case where path is a directory of zip files.
+            # If `num_datasets_to_select` is None, then all zips in the directory are
+            # selected.
+            paths = [p for p in os.listdir(path) if p.endswith(".zip")]
+            if num_datasets_to_select is not None:
+                paths = np.random.choice(
+                    paths,
+                    num_datasets_to_select,
+                    replace=num_datasets_to_select > len(paths),
+                ).tolist()
+            dataset = ConcatDataset(
+                [
+                    ContactDataset(path=os.path.join(path, p), **dataset_kwargs)
+                    for p in paths
+                ]
+            )
+        else:
+            # This codepath supports the case where path points to a zip.
+            assert os.path.exists(path) and path.endswith(".zip")
+            dataset = ContactDataset(path=path, **dataset_kwargs)
     elif isinstance(path, (list, tuple)):
+        # This codepath supports the case where path is a list of paths pointing
+        # to zips.
+        assert all([os.path.exists(p) and p.endswith(".zip") for p in path])
         dataset = ConcatDataset(
             [ContactDataset(path=p, **dataset_kwargs) for p in path]
         )
