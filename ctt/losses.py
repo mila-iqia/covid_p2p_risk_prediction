@@ -18,6 +18,8 @@ def get_class(key):
 
 
 class EntityMaskedLoss(nn.Module):
+    EPS = 1e-7
+
     def __init__(self, loss_cls):
         super(EntityMaskedLoss, self).__init__()
         self.loss_fn = loss_cls(reduction="none")
@@ -30,7 +32,7 @@ class EntityMaskedLoss(nn.Module):
         masked_loss_elements = (
             loss_elements[..., 0] if loss_elements.dim() == 3 else loss_elements
         ) * (mask[..., 0] if mask.dim() == 3 else mask)
-        reduced_loss = (masked_loss_elements.sum(-1) / mask.sum(-1)).mean()
+        reduced_loss = (masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)).mean()
         return reduced_loss
 
 
