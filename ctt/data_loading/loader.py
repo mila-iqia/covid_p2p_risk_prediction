@@ -370,13 +370,7 @@ class ContactDataset(Dataset):
         encounter_day = encounter_day.astype("float32")
         # -------- Health --------
         # Get health info
-        health_history = np.concatenate(
-            [
-                human_day_info["observed"]["reported_symptoms"],
-                human_day_info["observed"]["test_results"][:, None],
-            ],
-            axis=1,
-        )
+        health_history = self._fetch_health_history(human_day_info)
         infectiousness_history = self._fetch_infectiousness_history(human_day_info)
         history_days = np.arange(day_idx - 13, day_idx + 1)[::-1, None]
         valid_history_mask = (history_days >= 0)[:, 0]
@@ -509,6 +503,18 @@ class ContactDataset(Dataset):
                     (encounter_message[:, None] - self.ASSUMED_MIN_RISK)
                     / (self.ASSUMED_MAX_RISK - self.ASSUMED_MIN_RISK)
                 ).astype("float32")
+
+    def _fetch_health_history(self, human_day_info):
+        if human_day_info["observed"]["reported_symptoms"].shape[1] == 27:
+            symptoms = human_day_info["observed"]["reported_symptoms"]
+        elif human_day_info["observed"]["reported_symptoms"].shape[1] == 28:
+            # Remove the mystery symptom
+            symptoms = human_day_info["observed"]["reported_symptoms"][:, :-1]
+        else:
+            raise ValueError
+        return np.concatenate(
+            [symptoms, human_day_info["observed"]["test_results"][:, None],], axis=1,
+        )
 
     def __getitem__(self, item):
         while True:
