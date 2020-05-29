@@ -8,10 +8,9 @@ parameters:
   model__kwargs__capacity:
     distribution: categorical
     values: [128, 160, 192]
-  model__kwargs__num_sabs:
-    distribution: int_uniform
-    min: 1
-    max: 5
+  model__kwargs__block_types:
+    distribution: categorical
+    values: ["sssss", "ssss", "sss", "ss"]
   model__kwargs__num_heads:
     distribution: categorical
     values: [2, 4]
