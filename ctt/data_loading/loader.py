@@ -82,7 +82,7 @@ class ContactDataset(Dataset):
         path: str,
         relative_days=True,
         clip_history_days=False,
-        bit_encoded_messages=True,
+        bit_encoded_messages=False,
         transforms=None,
         pre_transforms=None,
         preload=False,

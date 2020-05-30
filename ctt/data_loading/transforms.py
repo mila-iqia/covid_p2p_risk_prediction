@@ -87,6 +87,10 @@ class QuantizedGaussianMessageNoise(Transform):
             return input_dict
 
 
+class BinomialMessageNoise(Transform):
+    pass
+
+
 class FractionalEncounterDurationNoise(Transform):
     def __init__(self, fractional_noise=0.1):
         self.fractional_noise = fractional_noise
@@ -98,7 +102,7 @@ class FractionalEncounterDurationNoise(Transform):
             return input_dict
         if self.fractional_noise == -1:
             # Special codepath to remove encounter duration from the input.
-            fractional_noise = 0.
+            fractional_noise = 0.0
         else:
             fractional_noise = 1 + (
                 torch.randn(
@@ -109,6 +113,55 @@ class FractionalEncounterDurationNoise(Transform):
                 * self.fractional_noise
             ).clamp_min(0)
         input_dict["encounter_duration"] = encounter_duration * fractional_noise
+        return input_dict
+
+
+class DropHealthHistory(Transform):
+    def __init__(self, symptom_dropout=0.3, test_result_dropout=0.3):
+        self.symptom_dropout = symptom_dropout
+        self.test_result_dropout = test_result_dropout
+
+    def apply(self, input_dict: Dict) -> Dict:
+        health_history = input_dict["health_history"]
+        # Get noise. Like in the other transforms, we have a codepath where
+        # setting the dropout to -1 results in all symptoms being dropped.
+        symptom_dropout = self.symptom_dropout if self.symptom_dropout != -1.0 else 1.0
+        symptom_mask = torch.rand(
+            (health_history.shape[0], health_history.shape[-1] - 1),
+            dtype=health_history.dtype,
+            device=health_history.dtype,
+        ).gt_(symptom_dropout)
+        test_result_dropout = (
+            self.test_result_dropout if self.test_result_dropout != -1.0 else 1.0
+        )
+        test_result_mask = torch.rand(
+            (health_history.shape[0], 1),
+            dtype=health_history.dtype,
+            device=health_history.device,
+        ).gt_(test_result_dropout)
+        full_mask = torch.cat([symptom_mask, test_result_mask], dim=-1)
+        input_dict["health_history"] = health_history * full_mask
+        return input_dict
+
+
+class DropHealthProfile(Transform):
+    def __init__(self, preexisting_condition_dropout=0.3):
+        self.preexisting_condition_dropout = preexisting_condition_dropout
+
+    def apply(self, input_dict: Dict) -> Dict:
+        health_profile = input_dict["health_profile"].clone()
+        pec_dropout = (
+            self.preexisting_condition_dropout
+            if self.preexisting_condition_dropout != -1.0
+            else 1.0
+        )
+        pec_mask = torch.rand(
+            (health_profile.shape[0] - 2,),
+            dtype=health_profile.dtype,
+            device=health_profile.device,
+        ).gt_(pec_dropout)
+        health_profile[2:] = health_profile[2:] * pec_mask
+        input_dict["health_profile"] = health_profile
         return input_dict
 
 
