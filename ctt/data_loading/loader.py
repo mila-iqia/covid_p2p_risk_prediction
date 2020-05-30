@@ -457,11 +457,7 @@ class ContactDataset(Dataset):
     def _fetch_encounter_is_contagion(
         self, human_day_info, valid_encounter_mask, encounter_day
     ):
-        if "exposure_encounter" not in human_day_info["unobserved"]:
-            return np.zeros(shape=(valid_encounter_mask.shape[0],))[
-                valid_encounter_mask, None
-            ].astype("float32")
-        elif valid_encounter_mask.shape[0] == 0:
+        if valid_encounter_mask.shape[0] == 0:
             # Empty tensor
             return np.zeros((0, 1)).astype("float32")
         else:
