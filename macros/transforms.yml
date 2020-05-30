@@ -2,12 +2,21 @@ data:
   loader_kwargs:
     bit_encoded_messages: false
   transforms:
+    __speedrun__: __purge__
     train:
       names:
         - QuantizedGaussianMessageNoise
         - FractionalEncounterDurationNoise
+        - DropHealthHistory
+        - DropHealthProfile
       kwargs:
         QuantizedGaussianMessageNoise:
-          noise_std: 1.5
+          noise_std: 0.5
         FractionalEncounterDurationNoise:
-          fractional_noise: 0.1
+          fractional_noise: 0.01
+        DropHealthHistory:
+          symptom_dropout: 0.3
+          test_result_dropout: 0.3
+          noise_coarseness: 1
+        DropHealthProfile:
+          preexisting_condition_dropout: 0.3

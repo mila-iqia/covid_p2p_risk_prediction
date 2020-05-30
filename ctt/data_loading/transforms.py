@@ -117,29 +117,72 @@ class FractionalEncounterDurationNoise(Transform):
 
 
 class DropHealthHistory(Transform):
-    def __init__(self, symptom_dropout=0.3, test_result_dropout=0.3):
+    def __init__(
+        self, symptom_dropout=0.3, test_result_dropout=0.3, noise_coarseness=1
+    ):
         self.symptom_dropout = symptom_dropout
         self.test_result_dropout = test_result_dropout
+        self.noise_coarseness = noise_coarseness
 
     def apply(self, input_dict: Dict) -> Dict:
         health_history = input_dict["health_history"]
         # Get noise. Like in the other transforms, we have a codepath where
         # setting the dropout to -1 results in all symptoms being dropped.
+        if self.symptom_dropout == -1 and self.test_result_dropout == -1:
+            # Speedy codepath where we skip the rng calls
+            return input_dict
         symptom_dropout = self.symptom_dropout if self.symptom_dropout != -1.0 else 1.0
-        symptom_mask = torch.rand(
-            (health_history.shape[0], health_history.shape[-1] - 1),
-            dtype=health_history.dtype,
-            device=health_history.dtype,
-        ).gt_(symptom_dropout)
         test_result_dropout = (
             self.test_result_dropout if self.test_result_dropout != -1.0 else 1.0
         )
-        test_result_mask = torch.rand(
-            (health_history.shape[0], 1),
-            dtype=health_history.dtype,
-            device=health_history.device,
-        ).gt_(test_result_dropout)
-        full_mask = torch.cat([symptom_mask, test_result_mask], dim=-1)
+        # Make a noise mask based on the `coarseness`
+        if self.noise_coarseness == 0:
+            # Fine noise -- meaning that if symptom A is dropped in day 1, it
+            # doesn't necessarily mean that it's dropped in day 2.
+            # Should simulate a scenario where the user "forgets" to enter symptoms
+            # in a given day.
+            symptom_mask = torch.rand(
+                (health_history.shape[0], health_history.shape[-1] - 1),
+                dtype=health_history.dtype,
+                device=health_history.device,
+            ).gt_(symptom_dropout)
+            test_result_mask = torch.rand(
+                (health_history.shape[0], 1),
+                dtype=health_history.dtype,
+                device=health_history.device,
+            ).gt_(test_result_dropout)
+            full_mask = torch.cat([symptom_mask, test_result_mask], dim=-1)
+        elif self.noise_coarseness == 1:
+            # Semi-coarse noise -- meaning that if a symptom is dropped in day 1,
+            # it's guaranteed to be dropped in all the days. However, just because
+            # one symptom is dropped doesn't mean that all others are dropped as well.
+            # Should simulate a scenario where the user "neglects" to enter particular
+            # symptoms.
+            symptom_mask = torch.rand(
+                (1, health_history.shape[-1] - 1),
+                dtype=health_history.dtype,
+                device=health_history.device,
+            ).gt_(symptom_dropout)
+            test_result_mask = torch.rand(
+                (1, 1), dtype=health_history.dtype, device=health_history.device,
+            ).gt_(test_result_dropout)
+            full_mask = torch.cat([symptom_mask, test_result_mask], dim=-1)
+        elif self.noise_coarseness == 2:
+            # Coarse noise -- meaning that either all symptoms are dropped or
+            # none of them are.
+            symptom_mask = (
+                torch.rand((), dtype=health_history.dtype, device=health_history.device)
+                .gt_(symptom_dropout)
+                .repeat(1, health_history.shape[-1] - 1)
+            )
+            test_result_mask = (
+                torch.rand((), dtype=health_history.dtype, device=health_history.device)
+                .gt_(test_result_dropout)
+                .repeat(1, 1)
+            )
+            full_mask = torch.cat([symptom_mask, test_result_mask], dim=-1)
+        else:
+            raise NotImplementedError
         input_dict["health_history"] = health_history * full_mask
         return input_dict
 
