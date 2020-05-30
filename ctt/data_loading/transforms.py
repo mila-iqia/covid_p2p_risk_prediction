@@ -129,7 +129,11 @@ class DropHealthHistory(Transform):
         # Get noise. Like in the other transforms, we have a codepath where
         # setting the dropout to -1 results in all symptoms being dropped.
         if self.symptom_dropout == -1 and self.test_result_dropout == -1:
-            # Speedy codepath where we skip the rng calls
+            # Speedy codepath where we skip the rng calls and just multiply by 0
+            input_dict["health_history"] = health_history * 0
+            return input_dict
+        elif self.symptom_dropout == 0 and self.test_result_dropout == 0:
+            # We're not adding any noise, so nothing to do here
             return input_dict
         symptom_dropout = self.symptom_dropout if self.symptom_dropout != -1.0 else 1.0
         test_result_dropout = (
@@ -192,6 +196,9 @@ class DropHealthProfile(Transform):
         self.preexisting_condition_dropout = preexisting_condition_dropout
 
     def apply(self, input_dict: Dict) -> Dict:
+        if self.preexisting_condition_dropout == 0:
+            # No noise to add, so we take this superfast codepath
+            return input_dict
         health_profile = input_dict["health_profile"].clone()
         pec_dropout = (
             self.preexisting_condition_dropout

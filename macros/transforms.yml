@@ -15,8 +15,8 @@ data:
         FractionalEncounterDurationNoise:
           fractional_noise: 0.01
         DropHealthHistory:
-          symptom_dropout: 0.3
-          test_result_dropout: 0.3
+          symptom_dropout: 0.
+          test_result_dropout: 0.
           noise_coarseness: 1
         DropHealthProfile:
-          preexisting_condition_dropout: 0.3
+          preexisting_condition_dropout: 0.
