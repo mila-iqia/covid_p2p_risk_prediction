@@ -1,0 +1,18 @@
+program: train.py
+method: grid
+parameters:
+  data__transforms__train__kwargs__QuantizedGaussianMessageNoise__noise_std:
+    distribution: categorical
+    values: [0., -1.]
+  data__transforms__train__kwargs__FractionalEncounterDurationNoise__fractional_noise:
+    distribution: categorical
+    values: [0., -1.]
+  data__transforms__train__kwargs__DropHealthHistory__symptom_dropout:
+    distribution: categorical
+    values: [0., -1.]
+  data__transforms__train__kwargs__DropHealthHistory__test_result_dropout:
+    distribution: categorical
+    values: [0., -1.]
+  data__transforms__train__kwargs__DropHealthProfile__preexisting_condition_dropout:
+    distribution: categorical
+    values: [0., -1.]
