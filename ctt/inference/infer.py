@@ -2,7 +2,7 @@ import os
 from speedrun import BaseExperiment
 
 from ctt.data_loading.loader import ContactPreprocessor
-from ctt.data_loading.transforms import get_transforms
+from ctt.data_loading.transforms import get_transforms, get_pre_transforms
 import ctt.models.transformer as tr
 import torch
 import torch.jit
@@ -16,6 +16,7 @@ class InferenceEngine(BaseExperiment):
 
     def _build(self, weight_path=None):
         test_transforms = get_transforms(self.get("data/transforms/test", {}))
+        test_pretransforms = get_pre_transforms(self.get("data/pre_transforms", {}))
         self.preprocessor = ContactPreprocessor(
             relative_days=self.get("data/loader_kwargs/relative_days", True),
             clip_history_days=self.get("data/loader_kwargs/clip_history_days", False),
@@ -23,6 +24,7 @@ class InferenceEngine(BaseExperiment):
                 "data/loader_kwargs/bit_encoded_messages", True
             ),
             transforms=test_transforms,
+            pre_transforms=test_pretransforms
         )
         self.model = self.load(weight_path=weight_path)
 

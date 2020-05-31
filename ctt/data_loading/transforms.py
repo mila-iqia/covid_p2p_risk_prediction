@@ -1,9 +1,11 @@
-import numpy as np
+from addict import Dict
+import datetime
 
+import numpy as np
 import torch
 from torchvision.transforms import Compose
 
-from addict import Dict
+import ctt.utils as cu
 
 
 # ------------------------------
@@ -85,10 +87,6 @@ class QuantizedGaussianMessageNoise(Transform):
                 encounter_message + noise, 0, 1
             )
             return input_dict
-
-
-class BinomialMessageNoise(Transform):
-    pass
 
 
 class FractionalEncounterDurationNoise(Transform):
@@ -218,6 +216,95 @@ class DropHealthProfile(Transform):
 # ------------------------------
 # ------- Pre-Transforms -------
 # ------------------------------
+
+
+class PatchTroubleBreathing(PreTransform):
+    def apply(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ) -> dict:
+        symptoms = np.copy(human_day_info["observed"]["reported_symptoms"])
+        # fmt: off
+        symptoms[:, cu.Symptoms.LIGHT_TROUBLE_BREATHING] = \
+            symptoms[:, cu.Symptoms.MILD_TROUBLE_BREATHING] = \
+            symptoms[:, cu.Symptoms.MILD] = np.stack(
+            [
+                symptoms[:, cu.Symptoms.LIGHT_TROUBLE_BREATHING],
+                symptoms[:, cu.Symptoms.MILD_TROUBLE_BREATHING],
+            ],
+        ).max(0)
+        # fmt: on
+        human_day_info["observed"]["reported_symptoms"] = symptoms
+        return human_day_info
+
+
+class DropInSymptomGroups(PreTransform):
+    def __init__(
+        self,
+        dropin_proba=0.3,
+        num_drop_in_groups="gamma",
+        noise_coarseness="random",
+        noise_coarseness_randomness_proba=0.5,
+        noise_coarseness_factor=0.5,
+    ):
+        self.dropin_proba = dropin_proba
+        self.num_drop_in_groups = num_drop_in_groups
+        self.noise_coarseness = noise_coarseness
+        self.noise_coarseness_randomness_proba = noise_coarseness_randomness_proba
+        self.noise_coarseness_factor = noise_coarseness_factor
+
+    def apply(
+        self, human_day_info: dict, human_idx: int = None, day_idx: int = None
+    ) -> dict:
+        drop_in_now = np.random.binomial(1, self.dropin_proba)
+        if isinstance(self.noise_coarseness, int):
+            noise_coarseness = self.noise_coarseness
+        elif self.noise_coarseness == "random":
+            # FIXME Make 0.5 a parameter in init
+            noise_coarseness = np.random.binomial(
+                1, self.noise_coarseness_randomness_proba
+            )
+        else:
+            raise NotImplementedError
+        if drop_in_now == 1:
+            symptoms = np.copy(human_day_info["observed"]["reported_symptoms"])
+            # Sample a group
+            if isinstance(self.num_drop_in_groups, int):
+                num_drop_in_groups = self.num_drop_in_groups
+            elif self.num_drop_in_groups == "uniform":
+                num_drop_in_groups = np.random.randint(len(cu.Symptoms.DROP_IN_GROUPS))
+            elif self.num_drop_in_groups == "gamma":
+                num_drop_in_groups = np.floor(
+                    np.random.gamma(shape=1.5, scale=5)
+                ).astype("int")
+            else:
+                raise NotImplementedError
+            symptom_groups = np.random.choice(
+                cu.Symptoms.DROP_IN_GROUPS, num_drop_in_groups, replace=False
+            ).tolist()
+            symptom_groups = [
+                _symptom
+                for _symptom_group in symptom_groups
+                for _symptom in _symptom_group
+            ]
+            if noise_coarseness == 1:
+                # Coarse noise, where we drop-in for the entire history of the past
+                # 14 days
+                symptoms[:, symptom_groups] = 1
+            elif noise_coarseness == 0:
+                # Fine noise, where we drop-in individually over each day. This means
+                # that if we're dropping in a group today, it doesn't necessarily mean
+                # that we're dropping in the same group tomorrow.
+                drop_in_mask = np.zeros(shape=(symptoms.shape[1]), dtype="int")
+                drop_in_mask[symptom_groups] = 1
+                drop_out_on_drop_in_mask = np.random.binomial(
+                    1, self.noise_coarseness_factor, size=(symptoms.shape[0])
+                )
+                full_mask = drop_out_on_drop_in_mask[:, None] * drop_in_mask[None, :]
+                symptoms = np.clip(symptoms + full_mask, a_max=1, a_min=None)
+        else:
+            symptoms = human_day_info["observed"]["reported_symptoms"]
+        human_day_info["observed"]["reported_symptoms"] = symptoms
+        return human_day_info
 
 
 class EncounterDropout(PreTransform):

@@ -21,7 +21,7 @@ from ctt.losses import WeightedSum
 from ctt.utils import to_device, momentum_accumulator
 from ctt.metrics import Metrics
 from ctt import opts
-from ctt.data_loading.transforms import get_transforms
+from ctt.data_loading.transforms import get_transforms, get_pre_transforms
 
 
 class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
@@ -48,9 +48,11 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
     def _build_train_loader(self):
         train_path = self.get("data/paths/train", ensure_exists=True)
         train_transforms = get_transforms(self.get("data/transforms/train", {}))
+        train_pretransforms = get_pre_transforms(self.get("data/pre_transforms", {}))
         self.train_loader = get_dataloader(
             path=train_path,
             transforms=train_transforms,
+            pre_transforms=train_pretransforms,
             rng=np.random.RandomState(self.epoch),
             **self.get("data/loader_kwargs", ensure_exists=True),
         )
@@ -58,9 +60,11 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
     def _build_validate_loader(self):
         validate_path = self.get("data/paths/validate", ensure_exists=True)
         validate_transforms = get_transforms(self.get("data/transforms/validate", {}))
+        validate_pretransforms = get_pre_transforms(self.get("data/pre_transforms", {}))
         self.validate_loader = get_dataloader(
             path=validate_path,
             transforms=validate_transforms,
+            pre_transforms=validate_pretransforms,
             rng=np.random.RandomState(self.epoch),
             **self.get("data/loader_kwargs", ensure_exists=True),
         )

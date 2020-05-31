@@ -49,3 +49,82 @@ def typed_sum_pool(x: torch.Tensor, type_: torch.Tensor, reference_types: torch.
     # For a given type t, sum over all entities m that are of type t.
     pooled = torch.einsum("bmc,bmt->btc", x, type_mask)
     return pooled
+
+
+def compute_moments(x, dim=0, num_moments=2):
+    if x.shape[dim] == 0:
+        # Special codepath that returns 0s instead of nans
+        shape = list(x.shape)
+        shape[dim] = num_moments
+        return torch.zeros(shape, dtype=x.dtype, device=x.device)
+    else:
+        mean = x.mean(dim=dim, keepdim=True)
+        residuals = x - mean
+        moments = [mean]
+        for moment in range(1, num_moments):
+            moments.append(residuals.pow(moment + 1).mean(dim=dim, keepdim=True))
+        moments = torch.cat(moments, dim=dim)
+        return moments
+
+
+class Symptoms:
+    MODERATE = 0
+    MILD = 1
+    SEVERE = 2
+    EXTREMELY_SEVERE = 3
+    FEVER = 4
+    CHILLS = 5
+    GASTRO = 6
+    DIARRHEA = 7
+    NAUSEA_VOMITING = 8
+    FATIGUE = 9
+    UNUSUAL = 10
+    HARD_TIME_WAKING_UP = 11
+    HEADACHE = 12
+    CONFUSED = 13
+    LOST_CONSCIOUSNESS = 14
+    TROUBLE_BREATHING = 15
+    SNEEZING = 16
+    COUGH = 17
+    RUNNY_NOSE = 18
+    ACHES = 19
+    SORE_THROAT = 20
+    SEVERE_CHEST_PAIN = 21
+    LOSS_OF_TASTE = 22
+    MILD_TROUBLE_BREATHING = 23
+    LIGHT_TROUBLE_BREATHING = 24
+    MODERATE_TROUBLE_BREATHING = 25
+    HEAVY_TROUBLE_BREATHING = 26
+
+    DROP_IN_GROUPS = [
+        [MILD],
+        [MODERATE],
+        [SEVERE],
+        [EXTREMELY_SEVERE],
+        [FEVER],
+        [FEVER, MODERATE],
+        [FEVER, CHILLS],
+        [GASTRO],
+        [GASTRO, DIARRHEA],
+        [GASTRO, DIARRHEA, NAUSEA_VOMITING],
+        [GASTRO, NAUSEA_VOMITING],
+        [FATIGUE],
+        [FATIGUE, UNUSUAL],
+        [FATIGUE, LOST_CONSCIOUSNESS],
+        [FATIGUE, HARD_TIME_WAKING_UP],
+        [FATIGUE, HEADACHE],
+        [FATIGUE, CONFUSED],
+        [TROUBLE_BREATHING],
+        [TROUBLE_BREATHING, SEVERE_CHEST_PAIN],
+        [TROUBLE_BREATHING, SNEEZING],
+        [TROUBLE_BREATHING, COUGH],
+        [TROUBLE_BREATHING, RUNNY_NOSE],
+        [TROUBLE_BREATHING, SORE_THROAT],
+        [LOSS_OF_TASTE],
+        [GASTRO, MODERATE],
+        [FATIGUE, GASTRO],
+        [MILD, MILD_TROUBLE_BREATHING, MILD_TROUBLE_BREATHING, LIGHT_TROUBLE_BREATHING],
+        [MODERATE, TROUBLE_BREATHING, MODERATE_TROUBLE_BREATHING],
+        [SEVERE, TROUBLE_BREATHING, HEAVY_TROUBLE_BREATHING],
+        [EXTREMELY_SEVERE, TROUBLE_BREATHING, HEAVY_TROUBLE_BREATHING],
+    ]
