@@ -276,6 +276,9 @@ class DropInSymptomGroups(PreTransform):
                 num_drop_in_groups = np.floor(
                     np.random.gamma(shape=1.5, scale=5)
                 ).astype("int")
+                num_drop_in_groups = min(
+                    num_drop_in_groups, len(cu.Symptoms.DROP_IN_GROUPS)
+                )
             else:
                 raise NotImplementedError
             symptom_groups = np.random.choice(
