@@ -25,8 +25,6 @@ class _MomentNet(nn.Module):
     def flatten(self, inputs):
         # -------- Shape Wrangling --------
         batch_size = inputs["health_history"].shape[0]
-        num_history_days = inputs["health_history"].shape[1]
-        num_encounters = inputs["encounter_health"].shape[1]
         # -------- The Flattening --------
         health_history = (
             inputs["health_history"] * inputs["valid_history_mask"][:, :, None]
@@ -108,7 +106,6 @@ class _MomentNet(nn.Module):
         # -------- Shape Wrangling --------
         batch_size = inputs["health_history"].shape[0]
         num_history_days = inputs["health_history"].shape[1]
-        num_encounters = inputs["encounter_health"].shape[1]
         # -------- Model Eval --------
         flattened_inputs = self.flatten(inputs)
         outputs = self.network(flattened_inputs).reshape(
@@ -128,14 +125,20 @@ class MomentNet(_MomentNet):
     def __init__(
         self,
         *,
-        capacity=128,
+        # Feature construction
         num_health_history_features=28,
         num_health_profile_features=12,
         message_dim=1,
         num_days=14,
         num_moments=2,
+        # Network
+        capacity=128,
         block_types=f"{LINEAR_RELU_BLOCK_TYPE}{LINEAR_BLOCK_TYPE}",
+        # Output
+        encounter_output_features=1,
+        latent_variable_output_features=1,
     ):
+        assert encounter_output_features == latent_variable_output_features == 1
         # Get input and output dimensions
         health_in_dim = (
             num_health_history_features * num_days
