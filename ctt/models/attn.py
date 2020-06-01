@@ -154,3 +154,22 @@ class SRB(nn.Module):
         Y = F.relu(self.fc_f(torch.cat([X, global_features], dim=-1))) + X
         Y = F.relu(self.fc_o(Y))
         return Y
+
+
+class ResLinearReLU(nn.Module):
+    """Fully Connected Residual Block"""
+    def __init__(self, dim):
+        super(ResLinearReLU, self).__init__()
+        self.fc = nn.Linear(dim, dim)
+
+    def forward(self, X):
+        X = F.relu(self.fc(X)) + X
+        return X
+
+
+class LinearReLU(nn.Linear):
+    def __init__(self, dim_in, dim_out):
+        super(LinearReLU, self).__init__(dim_in, dim_out)
+
+    def forward(self, X):
+        return F.relu(super(LinearReLU, self).forward(X))

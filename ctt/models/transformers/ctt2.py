@@ -180,7 +180,7 @@ class DiurnalContactTracingTransformerV2(_DiurnalContactTracingTransformerV2):
         num_encounter_partner_id_bits=16,
         use_encounter_partner_id_embedding=False,
         encounter_partner_id_embedding_dim=32,
-        message_dim=8,
+        message_dim=1,
         message_embedding_dim=128,
         # Attention
         pooled_encounter_dim=64,

@@ -19,6 +19,7 @@ class Tests(unittest.TestCase):
             DiurnalContactTracingTransformerV2,
             MixSetNet,
         )
+        from ctt.models.moment_processors import MomentNet
         from addict import Dict
 
         batch_size = 5
@@ -61,6 +62,9 @@ class Tests(unittest.TestCase):
 
         ctt = MixSetNet(srb_aggregation="mean")
         test_output(ctt)
+
+        mnet = MomentNet(block_types="l")
+        test_output(mnet)
 
     def test_tf_compat(self):
         import torch

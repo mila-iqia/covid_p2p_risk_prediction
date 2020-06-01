@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ctt.utils import thermometer_encoding
+from ctt.utils import thermometer_encoding, compute_moments
 
 
 class HealthHistoryEmbedding(nn.Sequential):
@@ -95,7 +95,7 @@ class EntityMasker(nn.Module):
             return entities * mask[:, :, None]
         elif self.mode == "logsum":
             with torch.no_grad():
-                log_mask = torch.log(mask.clamp_min(0.) + self.EPS)
+                log_mask = torch.log(mask.clamp_min(0.0) + self.EPS)
             return entities + log_mask[:, :, None]
         else:
             raise NotImplementedError
@@ -120,11 +120,7 @@ class TimeEmbedding(nn.Embedding):
 
 class PositionalEncoding(nn.Module):
     def __init__(
-        self,
-        encoding_dim=16,
-        position_dim=1,
-        max_frequency=10000,
-        normalize=True,
+        self, encoding_dim=16, position_dim=1, max_frequency=10000, normalize=True,
     ):
         super(PositionalEncoding, self).__init__()
         assert (
@@ -175,3 +171,15 @@ class PositionalEncoding(nn.Module):
         if mask is not None:
             encodings = encodings * (mask[:, :, None])
         return encodings
+
+
+class Moments(nn.Module):
+    def __init__(self, num_moments=2, dim=None):
+        super(Moments, self).__init__()
+        self.num_moments = num_moments
+        self.dim = dim
+
+    def forward(self, x, mask=None, dim=None):
+        dim = dim or self.dim
+        assert dim is not None
+        return compute_moments(x, mask=mask, dim=dim, num_moments=self.num_moments)

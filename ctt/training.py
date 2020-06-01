@@ -15,7 +15,7 @@ from speedrun import (
 )
 from speedrun.logging.wandb import WandBSweepMixin, SweepRunner
 
-import ctt.models.transformer as tr
+import ctt.models as models
 from ctt.data_loading.loader import get_dataloader
 from ctt.losses import WeightedSum
 from ctt.utils import to_device, momentum_accumulator
@@ -40,7 +40,7 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         self._build_scheduler()
 
     def _build_model(self):
-        model_cls = getattr(tr, self.get("model/name", "ContactTracingTransformer"))
+        model_cls = getattr(models, self.get("model/name", "ContactTracingTransformer"))
         self.model: nn.Module = to_device(
             model_cls(**self.get("model/kwargs", {})), self.device
         )
