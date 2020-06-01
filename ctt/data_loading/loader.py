@@ -661,12 +661,17 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
                     num_datasets_to_select,
                     replace=num_datasets_to_select > len(paths),
                 ).tolist()
-            dataset = ConcatDataset(
-                [
-                    ContactDataset(path=os.path.join(path, p), **dataset_kwargs)
-                    for p in paths
-                ]
-            )
+            dataset = []
+            for p in paths:
+                try:
+                    print(f"Reading dataset: {p}")
+                    dataset.append(
+                        ContactDataset(path=os.path.join(path, p), **dataset_kwargs)
+                    )
+                except OSError as e:
+                    print(f"Failed to read dataset at location "
+                          f"{p} due to exception:\n{str(e)}")
+            dataset = ConcatDataset(dataset)
         else:
             # This codepath supports the case where path points to a zip.
             assert os.path.exists(path) and path.endswith(".zip")
