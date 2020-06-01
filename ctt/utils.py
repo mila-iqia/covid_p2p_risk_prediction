@@ -51,7 +51,7 @@ def typed_sum_pool(x: torch.Tensor, type_: torch.Tensor, reference_types: torch.
     return pooled
 
 
-def compute_moments(x, dim=0, num_moments=2, mask=None):
+def compute_moments(x, dim=0, num_moments=2, mask=None, eps=1e-8):
     if x.shape[dim] == 0:
         # Special codepath that returns 0s instead of nans
         shape = list(x.shape)
@@ -61,8 +61,8 @@ def compute_moments(x, dim=0, num_moments=2, mask=None):
         if mask is None:
             mean = x.mean(dim=dim, keepdim=True)
         else:
-            mean = (x * mask).sum(dim=dim, keepdim=True) / mask.sum(
-                dim=dim, keepdim=True
+            mean = (x * mask).sum(dim=dim, keepdim=True) / (
+                mask.sum(dim=dim, keepdim=True) + eps
             )
         residuals = x - mean
         moments = [mean]
@@ -72,7 +72,7 @@ def compute_moments(x, dim=0, num_moments=2, mask=None):
             else:
                 moments.append(
                     (residuals.pow(moment + 1) * mask).sum(dim=dim, keepdim=True)
-                    / mask.sum(dim=dim, keepdim=True)
+                    / (mask.sum(dim=dim, keepdim=True) + eps)
                 )
         moments = torch.cat(moments, dim=dim)
         return moments
