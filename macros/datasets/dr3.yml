@@ -1,4 +1,6 @@
 data:
+  loader_kwargs:
+    num_datasets_to_select: 10
   paths:
     train: "./data/dr3/train"
     validate: "./data/dr3/val"
