@@ -3,7 +3,7 @@ from speedrun import BaseExperiment
 
 from ctt.data_loading.loader import ContactPreprocessor
 from ctt.data_loading.transforms import get_transforms, get_pre_transforms
-import ctt.models.transformer as tr
+import ctt.models as tr
 import torch
 import torch.jit
 
