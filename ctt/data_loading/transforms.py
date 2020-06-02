@@ -3,10 +3,9 @@ import datetime
 
 import numpy as np
 import torch
-from torchvision.transforms import Compose
 
 import ctt.utils as cu
-
+from ctt.utils import Compose
 
 # ------------------------------
 # ------- Infrastructure -------
