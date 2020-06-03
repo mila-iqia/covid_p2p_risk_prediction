@@ -33,9 +33,10 @@ from ctt.utils import typed_sum_pool
 
 
 class Metrics(nn.Module):
-    def __init__(self, diurnal_exposures=False):
+    def __init__(self, diurnal_exposures=False, activate=True):
         super(Metrics, self).__init__()
         self.diurnal_exposures = diurnal_exposures
+        self.activate = activate
         self.total_infectiousness_loss = 0
         self.total_infectiousness_count = 0
         self.total_encounter_mrr = 0
@@ -52,6 +53,8 @@ class Metrics(nn.Module):
         self.status_prediction = dict()
 
     def update(self, model_input, model_output):
+        if not self.activate:
+            return
         # Task 1: Infectiousness Prediction
         prediction = (
             model_output.latent_variable[:, :, 0:1]
@@ -158,6 +161,8 @@ class Metrics(nn.Module):
         return current_precision, current_recall
 
     def evaluate(self, percentage_list=[0.01, 0.5, 1.0]):
+        if not self.activate:
+            return dict()
         precision_all = [0.0 for _ in percentage_list]
         precision_nottested = [0.0 for _ in percentage_list]
         precision_nottested_notsymptomatic = [0.0 for _ in percentage_list]
