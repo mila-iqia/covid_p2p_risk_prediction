@@ -1,0 +1,30 @@
+data:
+  loader_kwargs:
+    num_datasets_to_select: 10
+    # Large batch training
+    batch_size: 1024
+    num_workers: 10
+  paths:
+    train: "./data/dr4/train"
+    validate: "./data/dr4/val"
+  pre_transforms:
+    names:
+      - PatchTroubleBreathing
+      - DropInSymptomGroups
+    kwargs:
+      DropInSymptomGroups:
+        dropin_proba: 0.008
+        noise_coarseness: 0
+
+# Large batch training
+optim:
+  __speedrun__: purge
+  kwargs:
+    eta_max: 0.0002
+    eta_min: 8.0e-06
+    num_steps: 50000
+    num_warmup_steps: 2500
+  name: WarmCosineAdam
+
+training:
+  num_epochs: 80
