@@ -1,0 +1,16 @@
+data:
+  loader_kwargs:
+    batch_size: 1024
+    num_workers: 10
+
+optim:
+  __speedrun__: purge
+  kwargs:
+    eta_max: 0.0002
+    eta_min: 8.0e-06
+    num_steps: 25000
+    num_warmup_steps: 200
+  name: WarmCosineAdam
+
+training:
+  num_epochs: 40
