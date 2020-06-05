@@ -1,7 +1,7 @@
 program: train.py
 method: grid
 parameters:
-  data__transforms__train__kwargs__QuantizedGaussianMessageNoise__noise_std:
+  data__transforms__train__kwargs__MessageDropout__proba:
     distribution: categorical
     values: [0., -1.]
   data__transforms__train__kwargs__FractionalEncounterDurationNoise__fractional_noise:
