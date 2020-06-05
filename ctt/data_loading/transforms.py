@@ -111,7 +111,7 @@ class MessageDropout(Transform):
         else:
             # Sample noise level
             mask = torch.rand(
-                encounter_message.shape[0],
+                encounter_message.shape,
                 device=encounter_message.device,
                 dtype=encounter_message.dtype,
             ).gt_(self.proba)
