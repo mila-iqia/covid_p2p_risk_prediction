@@ -88,6 +88,37 @@ class QuantizedGaussianMessageNoise(Transform):
             return input_dict
 
 
+class MessageDropout(Transform):
+    def __init__(self, proba=0.1):
+        self.proba = proba
+
+    def apply(self, input_dict: Dict) -> Dict:
+        encounter_message = input_dict["encounter_message"]
+        if encounter_message.shape[0] == 0:
+            # No encounter messages, so nothing to do.
+            return input_dict
+        assert (
+            encounter_message.shape[-1] == 1
+        ), "Noising is only supported for float encoded messages."
+        if self.proba == 0:
+            # Shortcut path where we don't add any noise
+            return input_dict
+        elif self.proba == -1:
+            # Shortcut path where we zero-out the messages
+            # (for the purpose of ensuring that the training uses the messages)
+            input_dict["encounter_message"] = encounter_message * 0.0
+            return input_dict
+        else:
+            # Sample noise level
+            mask = torch.rand(
+                encounter_message.shape[0],
+                device=encounter_message.device,
+                dtype=encounter_message.dtype,
+            ).gt_(self.proba)
+            input_dict["encounter_message"] = encounter_message * mask
+            return input_dict
+
+
 class FractionalEncounterDurationNoise(Transform):
     def __init__(self, fractional_noise=0.1):
         self.fractional_noise = fractional_noise

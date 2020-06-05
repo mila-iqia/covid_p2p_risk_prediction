@@ -1,0 +1,33 @@
+data:
+  loader_kwargs:
+    num_datasets_to_select: 10
+  paths:
+    train: "./data/dr6/train"
+    validate: "./data/dr6/val"
+  pre_transforms:
+    names:
+      - PatchTroubleBreathing
+      - DropInSymptomGroups
+    kwargs:
+      DropInSymptomGroups:
+        dropin_proba: 0.0008
+        noise_coarseness: 0
+  transforms:
+    __speedrun__: __purge__
+    train:
+      names:
+        - MessageDropout
+        - FractionalEncounterDurationNoise
+        - DropHealthHistory
+        - DropHealthProfile
+      kwargs:
+        MessageDropout:
+          proba: 0.1
+        FractionalEncounterDurationNoise:
+          fractional_noise: 0.01
+        DropHealthHistory:
+          symptom_dropout: 0.
+          test_result_dropout: 0.
+          noise_coarseness: 1
+        DropHealthProfile:
+          preexisting_condition_dropout: 0.
