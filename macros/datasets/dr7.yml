@@ -4,8 +4,8 @@ data:
   validation_loader_kwargs:
     num_datasets_to_select: null
   paths:
-    train: "./data/dr7/train"
-    validate: "./data/dr7/val"
+    train: "./data/dr7/all/train"
+    validate: "./data/dr7/all/val"
   pre_transforms:
     names:
       - DropInSymptomGroups
