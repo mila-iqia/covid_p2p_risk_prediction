@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from addict import Dict
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -22,9 +23,12 @@ from ctt.utils import to_device, momentum_accumulator
 from ctt.metrics import Metrics
 from ctt import opts
 from ctt.data_loading.transforms import get_transforms, get_pre_transforms
+from ctt.sim.interface import SimInterfaceMixin
 
 
-class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
+class CTTTrainer(
+    TensorboardMixin, WandBSweepMixin, IOMixin, SimInterfaceMixin, BaseExperiment
+):
     WANDB_PROJECT = "ctt"
 
     def __init__(self):
@@ -61,12 +65,15 @@ class CTTTrainer(TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment):
         validate_path = self.get("data/paths/validate", ensure_exists=True)
         validate_transforms = get_transforms(self.get("data/transforms/validate", {}))
         validate_pretransforms = get_pre_transforms(self.get("data/pre_transforms", {}))
+        # Prep loader kwargs (override things if required)
+        loader_kwargs = deepcopy(self.get("data/loader_kwargs", ensure_exists=True))
+        loader_kwargs.update(self.get("data/validation_loader_kwargs", {}))
         self.validate_loader = get_dataloader(
             path=validate_path,
             transforms=validate_transforms,
             pre_transforms=validate_pretransforms,
             rng=np.random.RandomState(self.epoch),
-            **self.get("data/loader_kwargs", ensure_exists=True),
+            **loader_kwargs,
         )
 
     def _build_loaders(self):
