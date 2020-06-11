@@ -1,0 +1,34 @@
+data:
+  loader_kwargs:
+    num_datasets_to_select: 10
+  validation_loader_kwargs:
+    num_datasets_to_select: null
+  paths:
+    train: "./data/dr8/all/train"
+    validate: "./data/dr8/all/val"
+  pre_transforms:
+    names:
+      - DropInSymptomGroups
+    kwargs:
+      DropInSymptomGroups:
+        dropin_proba: 0.0001
+        noise_coarseness: 0
+  transforms:
+    __speedrun__: __purge__
+    train:
+      names:
+        - MessageDropout
+        - FractionalEncounterDurationNoise
+        - DropHealthHistory
+        - DropHealthProfile
+      kwargs:
+        MessageDropout:
+          proba: 0.1
+        FractionalEncounterDurationNoise:
+          fractional_noise: 0.01
+        DropHealthHistory:
+          symptom_dropout: 0.
+          test_result_dropout: 0.
+          noise_coarseness: 1
+        DropHealthProfile:
+          preexisting_condition_dropout: 0.
