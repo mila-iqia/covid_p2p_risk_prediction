@@ -83,6 +83,7 @@ class ContactDataset(Dataset):
         relative_days=True,
         clip_history_days=False,
         bit_encoded_messages=False,
+        forward_prediction=False,
         transforms=None,
         pre_transforms=None,
         preload=False,
@@ -105,6 +106,9 @@ class ContactDataset(Dataset):
         bit_encoded_messages : bool
             Whether messages are encoded as a bit vector (True) or floats
             between 0 and 1 (False).
+        forward_prediction : bool
+            Whether to shift the infectiousness (i.e. target for the network) one
+            step to the future.
         transforms : callable
             Transforms to apply before sending sample to the collator.
         pre_transforms : callable
@@ -122,6 +126,7 @@ class ContactDataset(Dataset):
         self.relative_days = relative_days
         self.clip_history_days = clip_history_days
         self.bit_encoded_messages = bit_encoded_messages
+        self.forward_prediction = forward_prediction
         self.transforms = transforms
         self.pre_transforms = pre_transforms
         self.preload = preload
@@ -219,7 +224,7 @@ class ContactDataset(Dataset):
                 )
                 return random.choice(all_slots)
 
-    def _parse_file(self, file_name):
+    def _parse_file(self, file_name, find_relative_slot_idx=False):
         components = file_name.split("/")[-3:]
         # components[2] is always "daily-human", if you're wondering
         day_idx, human_idx, slot_idx = (
@@ -229,12 +234,24 @@ class ContactDataset(Dataset):
         )
         day_idx -= self._day_idx_offset
         human_idx -= self._human_idx_offset
+        if find_relative_slot_idx:
+            # Find all the slots of the day
+            _find_slots = (
+                lambda x: f"daily_outputs/{day_idx + self._day_idx_offset}/"
+                f"{human_idx + self._human_idx_offset}/daily_human-" in x
+            )
+            matching_files = sorted(
+                list(filter(_find_slots, self._files)),
+                key=lambda x: int(x.split("/")[-3:][2].strip("daily_human-.pkl")),
+            )
+            slot_idx = matching_files.index(file_name)
         return day_idx, human_idx, slot_idx
 
     def __len__(self):
         return len(self._files)
 
     def read(self, human_idx=None, day_idx=None, slot_idx=None, file_name=None):
+        # Priority goes to file_name
         if file_name is None:
             assert None not in [human_idx, day_idx, slot_idx]
             file_name = self._find_file(human_idx, day_idx, slot_idx)
@@ -252,12 +269,20 @@ class ContactDataset(Dataset):
                 with zf.open(file_name, "r") as f:
                     return pickle.load(f)
 
-    def _read_one_slot_in_the_future(
+    def _read_first_slot_of_next_day(
         self, human_idx=None, day_idx=None, slot_idx=None, file_name=None
     ):
+        # Priority goes to file_name
         if file_name is not None:
-            assert human_idx is day_idx is slot_idx is None
-        # TODO Continue
+            human_idx, day_idx, slot_idx = self._parse_file(file_name)
+        day_idx += 1
+        # Without this extra if clause, this will fail if day_idx is too big.
+        # With this check, it'll only make the function return None, something
+        # that will be handled downstream.
+        if day_idx < self.num_days:
+            return self.read(human_idx=human_idx, day_idx=day_idx, slot_idx=0)
+        else:
+            return None
 
     def get(
         self,
@@ -323,6 +348,17 @@ class ContactDataset(Dataset):
         """
         if human_day_info is None:
             human_day_info = self.read(human_idx, day_idx, slot_idx, file_name)
+            if self.forward_prediction:
+                future_human_day_info = self._read_first_slot_of_next_day(
+                    human_idx, day_idx, slot_idx, file_name
+                )
+            else:
+                # Future is not needed, so we don't waste time loading it
+                future_human_day_info = None
+        else:
+            # If we're here, we're running in the inference server -- future is
+            # not available.
+            future_human_day_info = None
         day_idx = human_day_info["current_day"]
         if human_idx is None:
             human_idx = -1
@@ -381,9 +417,14 @@ class ContactDataset(Dataset):
         # -------- Health --------
         # Get health info
         health_history = self._fetch_health_history(human_day_info)
-        infectiousness_history = self._fetch_infectiousness_history(human_day_info)
+        infectiousness_history, mask_head = self._fetch_infectiousness_history(
+            human_day_info, future_human_day_info
+        )
         history_days = np.arange(day_idx - 13, day_idx + 1)[::-1, None]
         valid_history_mask = (history_days >= 0)[:, 0]
+        if mask_head:
+            # Mask out the head (because we're "out of future" to read from)
+            valid_history_mask[0] = 0
         # Get historical health info given the day of encounter (shape = (M, 13))
         if num_encounters > 0:
             encounter_at_historical_day_idx = np.argmax(
@@ -395,7 +436,9 @@ class ContactDataset(Dataset):
                 (0, health_history.shape[-1]), dtype=health_history.dtype
             )
         # Get current epidemiological compartment
-        currently_infected = infectiousness_history[0, 0] > 0.0
+        currently_infected = (
+            infectiousness_history[(0 if not self.forward_prediction else 1), 0] > 0.0
+        )
         if human_day_info["unobserved"]["is_recovered"]:
             current_compartment = "R"
         elif currently_infected:
@@ -475,8 +518,28 @@ class ContactDataset(Dataset):
                 valid_encounter_mask, None
             ].astype("float32")
 
-    def _fetch_infectiousness_history(self, human_day_info):
-        infectiousness_history = human_day_info["unobserved"]["infectiousness"]
+    def _fetch_infectiousness_history(self, human_day_info, future_human_day_info=None):
+        mask_head = False
+        if self.forward_prediction:
+            if future_human_day_info is not None:
+                # We're predicting one step in the future, so we simply use
+                # the infectiousness history from one step in the future.
+                infectiousness_history = future_human_day_info["unobserved"][
+                    "infectiousness"
+                ]
+            else:
+                # We want to predict one step in the future, but this future is not
+                # available. So we shift the current history one step to the future,
+                # and repeat the current infectiousness as a placeholder for future
+                # infectiousness. This will be masked downstream.
+                mask_head = True
+                _infectiousness_history = human_day_info["unobserved"]["infectiousness"]
+                infectiousness_history = np.concatenate(
+                    [_infectiousness_history[0:1], _infectiousness_history[:-1]], axis=0
+                )
+        else:
+            # No forward prediction, plain old retrospective prediction
+            infectiousness_history = human_day_info["unobserved"]["infectiousness"]
         assert infectiousness_history.ndim == 1
         if infectiousness_history.shape[0] < 14:
             infectiousness_history = np.pad(
@@ -485,7 +548,7 @@ class ContactDataset(Dataset):
                 mode="constant",
             )
         assert infectiousness_history.shape[0] == 14
-        return infectiousness_history[:, None]
+        return infectiousness_history[:, None], mask_head
 
     def _fetch_encounter_message(self, encounter_message, num_encounters):
         if self.bit_encoded_messages:
