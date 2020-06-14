@@ -200,7 +200,10 @@ class ContactDataset(Dataset):
             f"{human_idx + self._human_idx_offset}/daily_human-" in x
         )
 
-        all_slots = sorted(list(filter(_find_slots, self._files)))
+        all_slots = sorted(
+            list(filter(_find_slots, self._files)),
+            key=lambda x: self._parse_file(x)[-1],
+        )
         try:
             return all_slots[slot_idx]
         except IndexError:
@@ -248,6 +251,13 @@ class ContactDataset(Dataset):
             with zipfile.ZipFile(self.path) as zf:
                 with zf.open(file_name, "r") as f:
                     return pickle.load(f)
+
+    def _read_one_slot_in_the_future(
+        self, human_idx=None, day_idx=None, slot_idx=None, file_name=None
+    ):
+        if file_name is not None:
+            assert human_idx is day_idx is slot_idx is None
+        # TODO Continue
 
     def get(
         self,
@@ -669,8 +679,10 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
                         ContactDataset(path=os.path.join(path, p), **dataset_kwargs)
                     )
                 except OSError as e:
-                    print(f"Failed to read dataset at location "
-                          f"{p} due to exception:\n{str(e)}")
+                    print(
+                        f"Failed to read dataset at location "
+                        f"{p} due to exception:\n{str(e)}"
+                    )
             dataset = ConcatDataset(dataset)
         else:
             # This codepath supports the case where path points to a zip.
