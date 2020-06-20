@@ -84,6 +84,7 @@ class ContactDataset(Dataset):
         clip_history_days=False,
         bit_encoded_messages=False,
         forward_prediction=False,
+        mask_current_day_encounters=False,
         transforms=None,
         pre_transforms=None,
         preload=False,
@@ -109,6 +110,8 @@ class ContactDataset(Dataset):
         forward_prediction : bool
             Whether to shift the infectiousness (i.e. target for the network) one
             step to the future.
+        mask_current_day_encounters : bool
+            Whether to mask out the encounters that happen at day zero (today).
         transforms : callable
             Transforms to apply before sending sample to the collator.
         pre_transforms : callable
@@ -127,6 +130,7 @@ class ContactDataset(Dataset):
         self.clip_history_days = clip_history_days
         self.bit_encoded_messages = bit_encoded_messages
         self.forward_prediction = forward_prediction
+        self.mask_current_day_encounters = mask_current_day_encounters
         self.transforms = transforms
         self.pre_transforms = pre_transforms
         self.preload = preload
@@ -378,7 +382,13 @@ class ContactDataset(Dataset):
             raise InvalidSetSize
         if num_encounters > 0:
             valid_encounter_mask = encounter_info[:, 3] > (day_idx - 14)
+            if self.mask_current_day_encounters:
+                valid_encounter_mask = np.logical_and(
+                    valid_encounter_mask, encounter_info[:, 3] != day_idx
+                )
             encounter_info = encounter_info[valid_encounter_mask]
+            # The number of valid encounters might have changed after the masking.
+            num_encounters = encounter_info.shape[0]
         else:
             valid_encounter_mask = np.ones((0,), dtype="bool")
         assert encounter_info.shape[1] == 4
