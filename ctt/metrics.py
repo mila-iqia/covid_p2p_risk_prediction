@@ -30,7 +30,17 @@ from ctt.utils import typed_sum_pool
 # (1) all users;
 # (2) users who have not been tested;
 # (3) users who have not been tested and have not reported any symptoms.
-
+#
+# Task 4: Pre-symptomatic people
+# Check the distribution of computed infectiousness at days D, D-1, D-2..., where D is
+# the time of first symptoms.
+# More specifically, for each instance, i.e., the record of a human at day D, if the
+# human starts to show symptoms at day D and does not have symptoms in the past 13
+# days, then the instance is treated as a positive example. If the human does not have
+# symptoms during all the 14 days, then the instance is treated as a negative example.
+# We compute the mean infectiousness for positive examples (a 14-dimensional vector)
+# and mean infectiousness for negative examples (a 14-dimensional vector), and report
+# the difference of the two vectors.
 
 class Metrics(nn.Module):
     def __init__(self, diurnal_exposures=False, activate=True):
@@ -43,6 +53,7 @@ class Metrics(nn.Module):
         self.total_encounter_hit1 = 0
         self.total_encounter_count = 0
         self.status_prediction = dict()
+        self.pre_symptomatic_data = list()
 
     def reset(self):
         self.total_infectiousness_loss = 0
@@ -51,6 +62,7 @@ class Metrics(nn.Module):
         self.total_encounter_hit1 = 0
         self.total_encounter_count = 0
         self.status_prediction = dict()
+        self.pre_symptomatic_data = list()
 
     def update(self, model_input, model_output):
         if not self.activate:
@@ -135,6 +147,15 @@ class Metrics(nn.Module):
             self.status_prediction[day_idx].append(
                 (human_idx, probability, infected, symptomatic, tested)
             )
+
+        # Task 4: Pre-symptomatic people
+        health_history = model_input.valid_history_mask.unsqueeze(-1) * model_input.health_history[:, :, 0:-1]
+        for k in range(model_input.human_idx.size(0)):
+            prediction = model_input.valid_history_mask[k, :] * model_output.latent_variable[k, :, 0]
+            if health_history[k, :, :].sum() == 0:
+                self.pre_symptomatic_data.append((0, model_input.valid_history_mask[k, :], prediction))
+            if health_history[k, 0, :].sum() != 0 and health_history[k, 1:, :].sum() == 0:
+                self.pre_symptomatic_data.append((1, model_input.valid_history_mask[k, :], prediction))
 
     def compute_pr(self, rank_list, percentage):
         top_n = int(percentage * len(rank_list))
@@ -234,5 +255,18 @@ class Metrics(nn.Module):
             result[
                 "recall top_{} users_not_tested_and_no_symptoms".format(percentage)
             ] = recall
+
+        # Compute the mean infectiousness for positive and negative examples respectively.
+        positive_sum = torch.cat([item[2].unsqueeze(0) for item in self.pre_symptomatic_data if item[0] == 1], dim=0).sum(dim=0)
+        positive_cnt = torch.cat([item[1].unsqueeze(0) for item in self.pre_symptomatic_data if item[0] == 1], dim=0).sum(dim=0)
+        positive_cnt += 1e-8
+        negative_sum = torch.cat([item[2].unsqueeze(0) for item in self.pre_symptomatic_data if item[0] == 0], dim=0).sum(dim=0)
+        negative_cnt = torch.cat([item[1].unsqueeze(0) for item in self.pre_symptomatic_data if item[0] == 0], dim=0).sum(dim=0)
+        negative_cnt += 1e-8
+        # Compute difference.
+        difference = positive_sum / positive_cnt - negative_sum / negative_cnt
+        # For now, I just print the vector out, as saving it into the result dict yields some error.
+        print(difference.data.cpu().numpy().tolist())
+        #result['pre-symptomatic'] = difference.data.cpu().numpy().tolist()
 
         return result
