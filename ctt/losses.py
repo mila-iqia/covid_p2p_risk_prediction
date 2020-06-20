@@ -23,23 +23,43 @@ class EntityMaskedLoss(nn.Module):
     def __init__(self, loss_cls):
         super(EntityMaskedLoss, self).__init__()
         self.loss_fn = loss_cls(reduction="none")
-        assert isinstance(self.loss_fn, (nn.MSELoss, nn.BCEWithLogitsLoss))
+        assert isinstance(
+            self.loss_fn, (nn.MSELoss, nn.BCEWithLogitsLoss, nn.CrossEntropyLoss)
+        )
 
     def forward(self, input, target, mask):
-        assert input.dim() == 3
-        assert mask.dim() == 2
-        loss_elements = self.loss_fn(input, target)
-        masked_loss_elements = (
-            loss_elements[..., 0] if loss_elements.dim() == 3 else loss_elements
-        ) * (mask[..., 0] if mask.dim() == 3 else mask)
-        reduced_loss = (masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)).mean()
+        assert input.dim() == 3, "Input should be a BMC tensor."
+        assert mask.dim() == 2, "Mask should be a BM tensor."
+        if isinstance(self.loss_fn, nn.CrossEntropyLoss):
+            # target.shape = BM1 of integers, specifying the index of the bin.
+            # Squeeze to a BM tensor.
+            target = target[:, :, 0]
+            # input.shape = BMC of logits, but pytorch expects BCM.
+            input = input.transpose(1, 2)
+            # loss_elements should be a BM tensor
+            loss_elements = self.loss_fn(input, target)
+            # Mask out the invalids
+            masked_loss_elements = loss_elements * mask
+            reduced_loss = (
+                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
+            ).mean()
+        else:
+            loss_elements = self.loss_fn(input, target)
+            masked_loss_elements = (
+                loss_elements[..., 0] if loss_elements.dim() == 3 else loss_elements
+            ) * (mask[..., 0] if mask.dim() == 3 else mask)
+            reduced_loss = (
+                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
+            ).mean()
         return reduced_loss
 
 
 class InfectiousnessLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, binned=False):
         super(InfectiousnessLoss, self).__init__()
-        self.masked_mse = EntityMaskedLoss(nn.MSELoss)
+        self.masked_loss = EntityMaskedLoss(
+            (nn.MSELoss if not binned else nn.CrossEntropyLoss)
+        )
 
     def forward(self, model_input, model_output):
         assert model_output.latent_variable.dim() == 3, (
@@ -47,8 +67,8 @@ class InfectiousnessLoss(nn.Module):
             "set-valued latent variables."
         )
         # This will block gradients to the entities that are invalid
-        return self.masked_mse(
-            model_output.latent_variable[:, :, 0:1],
+        return self.masked_loss(
+            model_output.latent_variable,
             model_input.infectiousness_history,
             model_input["valid_history_mask"],
         )

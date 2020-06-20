@@ -6,6 +6,7 @@ import torch.nn as nn
 from ctt.models.transformers.ctt0 import _ContactTracingTransformer
 import ctt.models.attn as attn
 import ctt.models.modules as mods
+import ctt.utils as cu
 
 
 class _MixSetNet(_ContactTracingTransformer):
@@ -63,6 +64,7 @@ class MixSetNet(_MixSetNet):
         srb_aggregation="max",
         srb_feature_size_divisor=1,
         block_types=f"{SRB_BLOCK_TYPE}{SAB_BLOCK_TYPE}",
+        use_layernorm=False,
         # Output
         encounter_output_features=1,
         latent_variable_output_features=1,
@@ -141,10 +143,17 @@ class MixSetNet(_MixSetNet):
                 )
             elif block_type == self.SAB_BLOCK_TYPE:
                 blocks.append(
-                    attn.SAB(dim_in=dim_in, dim_out=block_capacity, num_heads=num_heads)
+                    attn.SAB(
+                        dim_in=dim_in,
+                        dim_out=block_capacity,
+                        num_heads=num_heads,
+                        ln=use_layernorm,
+                    )
                 )
         blocks = nn.ModuleList(blocks)
         # ------- Output processors -------
+        if latent_variable_output_features == "num_bins":
+            latent_variable_output_features = len(cu.get_infectiousness_bins()) + 1
         # Encounter
         encounter_mlp = nn.Sequential(
             nn.Linear(block_capacity, capacity),

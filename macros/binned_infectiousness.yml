@@ -1,0 +1,23 @@
+model:
+  kwargs:
+    latent_variable_output_features: num_bins
+
+losses:
+  kwargs:
+    infectiousness:
+      binned: true
+
+data:
+  transforms:
+    train:
+      names:
+        - __speedrun__: append
+        - DigitizeInfectiousness
+    validate:
+      names:
+        - __speedrun__: append
+        - DigitizeInfectiousness
+    test:
+      names:
+        - __speedrun__: append
+        - DigitizeInfectiousness

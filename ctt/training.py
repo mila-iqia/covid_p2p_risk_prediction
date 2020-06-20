@@ -19,7 +19,11 @@ from speedrun.logging.wandb import WandBSweepMixin, SweepRunner
 import ctt.models as models
 from ctt.data_loading.loader import get_dataloader
 from ctt.losses import WeightedSum
-from ctt.utils import to_device, momentum_accumulator
+from ctt.utils import (
+    to_device,
+    momentum_accumulator,
+    set_infectiousness_bins,
+)
 from ctt.metrics import Metrics
 from ctt import opts
 from ctt.data_loading.transforms import get_transforms, get_pre_transforms
@@ -38,10 +42,14 @@ class CTTTrainer(
         self._dummy_sample = None  # kept for repeated tracing only
 
     def _build(self):
+        self._build_general()
         self._build_loaders()
         self._build_model()
         self._build_criteria_and_optim()
         self._build_scheduler()
+
+    def _build_general(self):
+        set_infectiousness_bins(self.get("general/infectiousness_bins", None))
 
     def _build_model(self):
         model_cls = getattr(models, self.get("model/name", "ContactTracingTransformer"))
@@ -224,9 +232,13 @@ class CTTTrainer(
                 test_output = self.model(self._dummy_sample)
                 trace = torch.jit.trace(self.model, (self._dummy_sample,),)
             trace.save(ckpt_path + ".trace")
+        current_validation_metrics = self.read_from_cache("current_validation_metrics")
         info_dict = {
             "model": self.model.state_dict(),
             "optim": self.optim.state_dict(),
+            "epoch": self.epoch,
+            "step": self.step,
+            "current_validation_metrics": current_validation_metrics,
         }
         torch.save(info_dict, ckpt_path)
 

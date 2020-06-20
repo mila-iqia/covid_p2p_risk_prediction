@@ -1,5 +1,6 @@
 from addict import Dict
 import datetime
+from contextlib import contextmanager
 
 import numpy as np
 import torch
@@ -13,12 +14,25 @@ from ctt.utils import Compose
 
 
 class Transform(object):
-    def apply(self, input_dict: Dict) -> Dict:
-        raise NotImplementedError
+    INVERT = False
 
-    def __call__(self, input_dict: Dict) -> Dict:
-        input_dict = Dict(input_dict)
-        return self.apply(input_dict)
+    @classmethod
+    @contextmanager
+    def invert_all_transforms(cls):
+        old_invert = cls.INVERT
+        cls.INVERT = True
+        yield
+        cls.INVERT = old_invert
+
+    def apply(self, input_dict: Dict) -> Dict:
+        return input_dict
+
+    def inverse_apply(self, output_dict):
+        return output_dict
+
+    def __call__(self, io_dict: Dict) -> Dict:
+        io_dict = Dict(io_dict)
+        return self.apply(io_dict)
 
 
 class PreTransform(object):
@@ -243,6 +257,46 @@ class DropHealthProfile(Transform):
         return input_dict
 
 
+class DigitizeInfectiousness(Transform):
+    DEFAULT_BINS = np.linspace(0, 0.7, 49)
+
+    def __init__(self, bins=None, inversion_mode="mode"):
+        self.bins = (
+            np.asarray(bins)
+            if bins is not None
+            else cu.get_infectiousness_bins(copy=True)
+        )
+        self.dequantization_bins = np.concatenate(
+            [self.bins[0:1], 0.5 * (self.bins[1:] + self.bins[:-1])]
+        )
+        self.inversion_mode = inversion_mode
+
+    def apply(self, input_dict: Dict) -> Dict:
+        infectiousness_history = input_dict["infectiousness_history"]
+        infectiousness_history = torch.from_numpy(
+            np.digitize(infectiousness_history.numpy(), bins=self.bins, right=True)
+        )
+        input_dict["infectiousness_history"] = infectiousness_history
+        return input_dict
+
+    def inverse_apply(self, output_dict):
+        infectiousness = output_dict["latent_variable"]
+        if self.inversion_mode == "mode":
+            binned_infectiousness = torch.argmax(infectiousness, dim=-1)
+            dequantized_infectiousness = torch.from_numpy(
+                np.take(
+                    self.dequantization_bins, binned_infectiousness.numpy(), mode="clip"
+                )
+            )
+        elif self.inversion_mode == "mean":
+            # TODO
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
+        output_dict["latent_variable"] = dequantized_infectiousness
+        return output_dict
+
+
 # ------------------------------
 # ------- Pre-Transforms -------
 # ------------------------------
@@ -380,7 +434,7 @@ def get_transforms(config):
     transforms = []
     for name in config.get("names", []):
         cls = globals()[name]
-        kwargs = config["kwargs"].get(name, {})
+        kwargs = config.get("kwargs", {}).get(name, {})
         transforms.append(cls(**kwargs))
     return Compose(transforms)
 

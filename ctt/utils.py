@@ -1,5 +1,6 @@
 from typing import Sequence
 import torch
+import numpy as np
 
 
 def to_device(x, device):
@@ -151,9 +152,26 @@ class Compose(object):
         return img
 
     def __repr__(self):
-        format_string = self.__class__.__name__ + '('
+        format_string = self.__class__.__name__ + "("
         for t in self.transforms:
-            format_string += '\n'
-            format_string += '    {0}'.format(t)
-        format_string += '\n)'
+            format_string += "\n"
+            format_string += "    {0}".format(t)
+        format_string += "\n)"
         return format_string
+
+
+_INFECTIOUSNESS_BINS = np.linspace(0, 0.7, 49)
+
+
+def get_infectiousness_bins(copy=False):
+    if copy:
+        return np.copy(_INFECTIOUSNESS_BINS)
+    else:
+        return _INFECTIOUSNESS_BINS
+
+
+def set_infectiousness_bins(value=None):
+    global _INFECTIOUSNESS_BINS
+    if value is not None:
+        _INFECTIOUSNESS_BINS = value
+    return _INFECTIOUSNESS_BINS
