@@ -17,6 +17,40 @@ def get_class(key):
     return KEY_CLASS_MAPPING[key]
 
 
+class SmoothedBinLoss(nn.Module):
+    def __init__(self, spillage=1, gamma=2.0, reduction="mean"):
+        super(SmoothedBinLoss, self).__init__()
+        self.spillage = spillage
+        self.gamma = gamma
+        self.kl = nn.KLDivLoss(reduction=reduction)
+
+    def forward(self, input, target):
+        # input.shape = BMC,
+        # target.shape = BM
+        B, M = target.shape
+        _, _, C = input.shape
+        assert list(input.shape) == [B, M, C]
+        with torch.no_grad():
+            # noinspection PyTypeChecker
+            _II, _JJ = torch.meshgrid(
+                torch.arange(B, dtype=torch.long, device=target.device),
+                torch.arange(M, dtype=torch.long, device=target.device),
+            )
+            # target.shape = BMC
+            _target = torch.zeros((B, M, C), dtype=torch.float32, device=target.device)
+            # Smooth it out
+            _target[_II, _JJ, target] += 1.0
+            for delta in range(1, self.spillage + 1):
+                # fmt: off
+                _target[_II, _JJ, (target - delta).clamp_min(0)] += self.gamma ** (-delta)
+                _target[_II, _JJ, (target + delta).clamp_max(C)] += self.gamma ** (-delta)
+                # fmt: on
+            target = _target.div_(_target.sum(-1, keepdim=True))
+        input = torch.log_softmax(input, dim=-1)
+        loss = self.kl(input, target)
+        return loss
+
+
 class EntityMaskedLoss(nn.Module):
     EPS = 1e-7
 
@@ -24,7 +58,8 @@ class EntityMaskedLoss(nn.Module):
         super(EntityMaskedLoss, self).__init__()
         self.loss_fn = loss_cls(reduction="none")
         assert isinstance(
-            self.loss_fn, (nn.MSELoss, nn.BCEWithLogitsLoss, nn.CrossEntropyLoss)
+            self.loss_fn,
+            (nn.MSELoss, nn.BCEWithLogitsLoss, nn.CrossEntropyLoss, SmoothedBinLoss),
         )
 
     def forward(self, input, target, mask):
@@ -33,12 +68,29 @@ class EntityMaskedLoss(nn.Module):
         if isinstance(self.loss_fn, nn.CrossEntropyLoss):
             # target.shape = BM1 of integers, specifying the index of the bin.
             # Squeeze to a BM tensor.
-            target = target[:, :, 0]
+            if target.dim() == 3:
+                assert target.shape[-1] == 1
+                target = target[:, :, 0]
             # input.shape = BMC of logits, but pytorch expects BCM.
             input = input.transpose(1, 2)
             # loss_elements should be a BM tensor
             loss_elements = self.loss_fn(input, target)
             # Mask out the invalids
+            masked_loss_elements = loss_elements * mask
+            reduced_loss = (
+                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
+            ).mean()
+        elif isinstance(self.loss_fn, SmoothedBinLoss):
+            # target.shape = BM1 of integers specifying the index of the bin.
+            # Squeeze to a BM tensor for downstream.
+            if target.dim() == 3:
+                assert target.shape[-1] == 1
+                target = target[:, :, 0]
+            # input.shape = BMC, which is what the downstream func expects.
+            # loss_elements.shape = BMC, but the last dimension should be summed over
+            # to get the real KL div. This gives us:
+            # loss_elements.shape = BM
+            loss_elements = self.loss_fn(input, target).sum(-1)
             masked_loss_elements = loss_elements * mask
             reduced_loss = (
                 masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
@@ -55,11 +107,19 @@ class EntityMaskedLoss(nn.Module):
 
 
 class InfectiousnessLoss(nn.Module):
-    def __init__(self, binned=False):
+    def __init__(self, binned=False, spillage=None, gamma=2.0):
         super(InfectiousnessLoss, self).__init__()
-        self.masked_loss = EntityMaskedLoss(
-            (nn.MSELoss if not binned else nn.CrossEntropyLoss)
-        )
+        if binned:
+            if spillage is None:
+                self.masked_loss = EntityMaskedLoss(nn.CrossEntropyLoss)
+            else:
+                self.masked_loss = EntityMaskedLoss(
+                    lambda reduction: SmoothedBinLoss(
+                        spillage=spillage, gamma=gamma, reduction=reduction
+                    )
+                )
+        else:
+            self.masked_loss = EntityMaskedLoss(nn.MSELoss)
 
     def forward(self, model_input, model_output):
         assert model_output.latent_variable.dim() == 3, (
