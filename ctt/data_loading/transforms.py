@@ -259,6 +259,7 @@ class DropHealthProfile(Transform):
 
 class DigitizeInfectiousness(Transform):
     DEFAULT_BINS = np.linspace(0, 0.7, 49)
+    INFINITY_BIN = 1.0
 
     def __init__(self, bins=None, inversion_mode="mode"):
         self.bins = (
@@ -289,8 +290,17 @@ class DigitizeInfectiousness(Transform):
                 )
             )
         elif self.inversion_mode == "mean":
-            # TODO
-            raise NotImplementedError
+            with torch.no_grad():
+                infectiousness = torch.softmax(infectiousness, dim=-1)
+            dequant_bins = np.concatenate(
+                [self.dequantization_bins, [self.INFINITY_BIN]]
+            )
+            dequantized_infectiousness = torch.from_numpy(
+                infectiousness.numpy() * dequant_bins[None, None]
+            ).mean(-1)
+        elif self.inversion_mode == "none":
+            with torch.no_grad():
+                dequantized_infectiousness = torch.softmax(infectiousness, dim=-1)
         else:
             raise NotImplementedError
         output_dict["latent_variable"] = dequantized_infectiousness

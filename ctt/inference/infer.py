@@ -2,17 +2,51 @@ import os
 from speedrun import BaseExperiment
 
 from ctt.data_loading.loader import ContactPreprocessor
-from ctt.data_loading.transforms import get_transforms, get_pre_transforms
+from ctt.data_loading.transforms import get_transforms, get_pre_transforms, Transform
 import ctt.models as tr
 import torch
 import torch.jit
 
 
 class InferenceEngine(BaseExperiment):
-    def __init__(self, experiment_directory, weight_path=None):
-        super(InferenceEngine, self).__init__(experiment_directory=experiment_directory)
+    EXP_DIR_SEP = "@"
+
+    def __init__(self, experiment_directory, weight_path=None, macro_path=None):
+        """
+        Parameters
+        ----------
+        experiment_directory : str
+            Experiment directory to initialize the model and read weights from.
+            Can either be:
+                -> `path/to/experiment/directory`
+                -> `path/to/experiment/directory@path/to/weights`
+            In the latter case, `path/to/weights` is used as a substitute for the
+            `weight_path` argument, if the latter is set to its default value of None.
+        weight_path : str
+            Path to weights. If left at None, the weight path can still be set
+            by the `experiment_directory` string. If not left at None,
+            this argument takes precedence.
+        macro_path : str
+            Path to macro, if applicable. Can be set by the env variable
+            INFERENCE_ENGINE_MACRO.
+        """
+        experiment_directory_components = experiment_directory.split(self.EXP_DIR_SEP)
+        # Init superclass with the first component, which is always the
+        # experiment directory.
+        super(InferenceEngine, self).__init__(
+            experiment_directory=experiment_directory_components[0]
+        )
+        if weight_path is None and len(experiment_directory_components) > 1:
+            weight_path = experiment_directory_components[1]
         self.record_args().read_config_file()
+        macro_path = self._get_macro_path() if macro_path is None else macro_path
+        if macro_path is not None:
+            self.read_macro(macro_path)
         self._build(weight_path=weight_path)
+
+    @staticmethod
+    def _get_macro_path():
+        return os.getenv("INFERENCE_ENGINE_MACRO", None)
 
     def _build(self, weight_path=None):
         test_transforms = get_transforms(self.get("data/transforms/test", {}))
@@ -24,7 +58,7 @@ class InferenceEngine(BaseExperiment):
                 "data/loader_kwargs/bit_encoded_messages", True
             ),
             transforms=test_transforms,
-            pre_transforms=test_pretransforms
+            pre_transforms=test_pretransforms,
         )
         self.model = self.load(weight_path=weight_path)
 
@@ -57,10 +91,14 @@ class InferenceEngine(BaseExperiment):
                     "encounter_variables": model_output[0],
                     "latent_variable": model_output[1],
                 }
+            with Transform.invert_all_transforms():
+                model_output = self.preprocessor.transforms(model_output)
             contagion_proba = (
                 model_output["encounter_variables"].sigmoid().numpy()[0, :, 0]
             )
-            infectiousness = model_output["latent_variable"].numpy()[0, :, 0]
+            # Nasim, don't you remember how bad unconditional squeezes effed you up
+            # back in the days?
+            infectiousness = model_output["latent_variable"].numpy()[0].squeeze()
         return dict(contagion_proba=contagion_proba, infectiousness=infectiousness)
 
 
@@ -69,9 +107,14 @@ def _profile(num_trials, experiment_directory):
     import time
 
     print("Loading data...")
-    data_path = "../../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509-182246-output.zip"
+    data_path = (
+        "../../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509"
+        "-182246-output.zip"
+    )
     dataset = ContactDataset(path=data_path, preload=True)
-    human_day_infos = [dataset.read(file_name=dataset._files[k]) for k in range(num_trials)]
+    human_day_infos = [
+        dataset.read(file_name=dataset._files[k]) for k in range(num_trials)
+    ]
 
     engine = InferenceEngine(experiment_directory)
     _ = engine.infer(human_day_infos[0])
@@ -89,4 +132,3 @@ if __name__ == "__main__":
     # _profile(500, "/Users/nrahaman/Python/ctt/tmp/DEBUG-DCTT-MOREXA-0")
     _profile(1000, "/Users/nrahaman/Python/ctt/tmp/FRESH-SNOWFLAKE-224B")
     _profile(1000, "/Users/nrahaman/Python/ctt/tmp/WINTER-MOON-285")
-
