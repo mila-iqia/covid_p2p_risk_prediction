@@ -57,6 +57,9 @@ class InferenceEngine(BaseExperiment):
             bit_encoded_messages=self.get(
                 "data/loader_kwargs/bit_encoded_messages", True
             ),
+            mask_current_day_encounters=self.get(
+                "data/loader_kwargs/mask_current_day_encounters", False
+            ),
             transforms=test_transforms,
             pre_transforms=test_pretransforms,
         )
