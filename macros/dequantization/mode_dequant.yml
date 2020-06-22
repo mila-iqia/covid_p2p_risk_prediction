@@ -1,0 +1,6 @@
+data:
+  transforms:
+    test:
+      kwargs:
+        DigitizeInfectiousness:
+          inversion_mode: mode
