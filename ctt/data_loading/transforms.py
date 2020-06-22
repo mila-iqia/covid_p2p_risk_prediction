@@ -32,7 +32,10 @@ class Transform(object):
 
     def __call__(self, io_dict: Dict) -> Dict:
         io_dict = Dict(io_dict)
-        return self.apply(io_dict)
+        if not self.INVERT:
+            return self.apply(io_dict)
+        else:
+            return self.inverse_apply(io_dict)
 
 
 class PreTransform(object):
