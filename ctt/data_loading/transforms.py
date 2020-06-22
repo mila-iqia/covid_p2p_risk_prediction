@@ -262,7 +262,7 @@ class DropHealthProfile(Transform):
 
 class DigitizeInfectiousness(Transform):
     DEFAULT_BINS = np.linspace(0, 0.7, 49)
-    INFINITY_BIN = 1.0
+    INFINITY_BIN = 0.7
 
     def __init__(self, bins=None, inversion_mode="mode"):
         self.bins = (
