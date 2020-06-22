@@ -300,7 +300,7 @@ class DigitizeInfectiousness(Transform):
             )
             dequantized_infectiousness = torch.from_numpy(
                 infectiousness.numpy() * dequant_bins[None, None]
-            ).mean(-1)
+            ).sum(-1)
         elif self.inversion_mode == "none":
             with torch.no_grad():
                 dequantized_infectiousness = torch.softmax(infectiousness, dim=-1)
