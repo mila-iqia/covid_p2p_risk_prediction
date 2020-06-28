@@ -58,6 +58,7 @@ class MixSetNet(_MixSetNet):
         encounter_partner_id_embedding_dim=32,
         message_dim=1,
         message_embedding_dim=128,
+        message_embedding_mode="mlp",
         # Attention
         num_heads=4,
         block_capacity=128,
@@ -107,12 +108,20 @@ class MixSetNet(_MixSetNet):
             )
         else:
             partner_id_embedding = None
-        message_embedding = mods.MessageEmbedding(
-            message_dim=message_dim,
-            embedding_size=message_embedding_dim,
-            capacity=capacity,
-            dropout=dropout,
-        )
+        if message_embedding_mode == "mlp":
+            message_embedding = mods.MessageEmbedding(
+                message_dim=message_dim,
+                embedding_size=message_embedding_dim,
+                capacity=capacity,
+                dropout=dropout,
+            )
+        elif message_embedding_mode == "sines":
+            assert message_dim == 1
+            message_embedding = mods.PositionalEncoding(
+                encoding_dim=message_embedding_dim,
+            )
+        else:
+            raise NotImplementedError
         # ------- Attention -------
         block_in_dim = (
             time_embedding_dim
