@@ -3,9 +3,10 @@ import unittest
 
 class Tests(unittest.TestCase):
 
-    DATASET_PATH = (
-        ZIP_PATH
-    ) = "../data/payload/sim_v2_people-1000_days-22_init-0.001_seed-2_20200527-214120.zip"
+    DATASET_PATH = ZIP_PATH = (
+        "../data/sim_v2_people-1000_days-30_init-0.003570583805768116_uptake-"
+        "0.9814107861305532_seed-3098_20200629-230107_414875.zip"
+    )
     DATASET_DIR_PATH = "../data/payload"
     EXP_DIR = "/Users/nrahaman/Python/ctt/tmp/CTT-SHIPMENT-0"
     NUM_KEYS_IN_BATCH = 15

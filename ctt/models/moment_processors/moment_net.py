@@ -127,7 +127,7 @@ class MomentNet(_MomentNet):
         *,
         # Feature construction
         num_health_history_features=28,
-        num_health_profile_features=12,
+        num_health_profile_features=13,
         message_dim=1,
         num_days=14,
         num_moments=2,

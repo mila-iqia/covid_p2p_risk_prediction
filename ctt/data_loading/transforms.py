@@ -356,7 +356,6 @@ class DropInSymptomGroups(PreTransform):
         if isinstance(self.noise_coarseness, int):
             noise_coarseness = self.noise_coarseness
         elif self.noise_coarseness == "random":
-            # FIXME Make 0.5 a parameter in init
             noise_coarseness = np.random.binomial(
                 1, self.noise_coarseness_randomness_proba
             )

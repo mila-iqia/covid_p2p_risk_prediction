@@ -152,7 +152,7 @@ class ContactDataset(Dataset):
                 files = zipfile.ZipFile.namelist(zf)
 
         # Filter to keep only the pickles
-        files = [f for f in files if f.endswith(".pkl")]
+        files = [f for f in files if f.endswith(".pkl") and "daily_human" in f]
 
         def extract_components(file):
             components = file.split("/")[-3:]
@@ -318,13 +318,16 @@ class ContactDataset(Dataset):
             An addict with the following attributes:
                 -> `health_history`: 14-day health history of self of shape (14, 28)
                         with channels `reported_symptoms` (27), `test_results`(1).
-                -> `health_profile`: health profile of the individual,
-                    of shape (12,), containing channels `age` (1), `sex` (1), and
-                    `preexisting_conditions` (10,). Note that `age` is a float taking
-                    values in Union([0, 1], {-1}). 0 corresponds to age 1 and 1 to
-                    age 100, whereas {-1} corresponds to the case where age is not
-                    available. Likewise, `sex` can be one of {-1, 0, 1}, where -1
-                    implies that `sex` is not known.
+                -> `preexisting_conditions`: preexisting conditions reported by the
+                    individual, of shape (10,).
+                -> `age`: reported age of the individual of shape (1,). Note that age
+                    is a float in the interval [0, 1] if reported, -1 otherwise.
+                -> `sex`: reported sex of the individual of shape (1,). Note that sex
+                    can be one of {-1, 0, 1, 2}, where:
+                        -1: unreported
+                         0: not known
+                         1: female
+                         2: male
                 -> `human_idx`: the ID of the human individual, of shape (1,). If not
                     available, it's set to -1.
                 -> `day_idx`: the day from which the sample originates, of shape (1,).
@@ -373,8 +376,6 @@ class ContactDataset(Dataset):
         # Extract info about encounters
         #   encounter_info.shape = M3, where M is the number of encounters.
         encounter_info = human_day_info["observed"]["candidate_encounters"]
-        # FIXME This is a hack:
-        #  Filter encounter_info
         if encounter_info.size == 0:
             encounter_info = encounter_info.reshape(0, 4)
         num_encounters = encounter_info.shape[0]
@@ -485,6 +486,9 @@ class ContactDataset(Dataset):
             day_idx=torch.from_numpy(np.array([day_idx])),
             health_history=torch.from_numpy(health_history).float(),
             health_profile=torch.from_numpy(health_profile).float(),
+            preexsting_conditions=torch.from_numpy(preexsting_conditions).float(),
+            age=torch.from_numpy(age).float(),
+            sex=torch.from_numpy(sex).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
             history_days=torch.from_numpy(history_days).float(),
             valid_history_mask=torch.from_numpy(valid_history_mask).float(),
