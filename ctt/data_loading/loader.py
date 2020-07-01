@@ -431,6 +431,10 @@ class ContactDataset(Dataset):
         infectiousness_history, mask_head = self._fetch_infectiousness_history(
             human_day_info, future_human_day_info
         )
+        viral_load_history = self._fetch_viral_load_history(
+            infectiousness_history, human_day_info
+        )
+        exposed_at_day = self._fetch_exposed_at_day(human_day_info)
         history_days = np.arange(day_idx - 13, day_idx + 1)[::-1, None]
         valid_history_mask = (history_days >= 0)[:, 0]
         if mask_head:
@@ -490,6 +494,8 @@ class ContactDataset(Dataset):
             age=torch.from_numpy(age).float(),
             sex=torch.from_numpy(sex).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
+            viral_load_history=torch.from_numpy(viral_load_history).float(),
+            exposed_at_day=torch.from_numpy(exposed_at_day).float(),
             history_days=torch.from_numpy(history_days).float(),
             valid_history_mask=torch.from_numpy(valid_history_mask).float(),
             current_compartment=torch.from_numpy(current_compartment).float(),
@@ -563,6 +569,27 @@ class ContactDataset(Dataset):
             )
         assert infectiousness_history.shape[0] == 14
         return infectiousness_history[:, None], mask_head
+
+    def _fetch_viral_load_history(self, infectiousness_history, human_day_info):
+        multiplier = human_day_info["unobserved"][
+            "viral_load_to_infectiousness_multiplier"
+        ]
+        if multiplier is not None:
+            viral_load_history = infectiousness_history / multiplier
+        else:
+            assert infectiousness_history.sum() == 0, (
+                "Human is infectious but `viral_load_to_infectiousness_multiplier`"
+                " is None."
+            )
+            viral_load_history = infectiousness_history
+        return viral_load_history
+
+    def _fetch_exposed_at_day(self, human_day_info):
+        exposed_since = human_day_info["unobserved"]["exposure_day"]
+        exposed_at_day = np.zeros(shape=(14,))
+        if exposed_since is not None and exposed_since < 14:
+            exposed_at_day[exposed_since] = 1
+        return exposed_at_day
 
     def _fetch_encounter_message(self, encounter_message, num_encounters):
         if self.bit_encoded_messages:

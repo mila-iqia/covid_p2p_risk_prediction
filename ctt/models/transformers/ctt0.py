@@ -26,7 +26,7 @@ class _ContactTracingTransformer(nn.Module):
         partner_id_embedding: Union[nn.Module, None],
         message_embedding: nn.Module,
         self_attention_blocks: nn.ModuleList,
-        latent_variable_mlp: nn.Module,
+        latent_variable_mlp: Union[nn.Module, nn.ModuleDict],
         encounter_mlp: nn.Module,
         entity_masker: nn.Module,
         message_placeholder: nn.Parameter,
@@ -254,7 +254,13 @@ class _ContactTracingTransformer(nn.Module):
         pre_latent_variable = self._get_pre_latent_variable(entities, num_encounters)
         # Push through the latent variable MLP to get the latent variables
         # latent_variable.shape = BTC
-        latent_variable = self.latent_variable_mlp(pre_latent_variable)
+        if not isinstance(self.latent_variable_mlp, nn.ModuleDict):
+            latent_variable_mlps = {"latent_variable": self.latent_variable_mlp}
+        else:
+            latent_variable_mlps = self.latent_variable_mlp
+        latent_variables = {
+            key: mlp(pre_latent_variable) for key, mlp in latent_variable_mlps.items()
+        }
         # -------- Generate Output Variables --------
         # Process encounters to their variables
         pre_encounter_variables = self._get_pre_encounter_variables(
@@ -269,11 +275,15 @@ class _ContactTracingTransformer(nn.Module):
         assert (
             not self._diagnose or not self._output_as_tuple
         ), "cannot produce tuple (for tracing) while diagnosing"
+        # If legacy code expects a tuple somewhere, we only give out the first
+        # latent variable.
         if self._output_as_tuple:
-            return encounter_variables, latent_variable
+            return encounter_variables, latent_variables["latent_variable"]
         results = dict()
         results["encounter_variables"] = encounter_variables
-        results["latent_variable"] = latent_variable
+        # This is still compatible with legacy code that expects a
+        # "latent_variable" entry.
+        results.update(latent_variables)
         if self._diagnose:
             _locals = dict(locals())
             _locals.pop("results")
