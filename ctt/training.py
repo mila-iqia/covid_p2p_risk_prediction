@@ -174,6 +174,11 @@ class CTTTrainer(
         early_stopping_metric = all_losses_and_metrics[
             self.get("training/checkpoint/early_stopping_metric", "loss")
         ]
+        assert early_stopping_metric != {}, (
+            f"Could not fetch metric at key: "
+            f"{self.get('training/checkpoint/early_stopping_metric', 'loss')}. "
+            f"Possible keys are: {all_losses_and_metrics.keys()}"
+        )
         # Store the validation loss in cache. This will be used for checkpointing.
         self.write_to_cache("current_validation_metrics", all_losses_and_metrics)
         self.write_to_cache("current_validation_loss", all_losses_and_metrics.loss)
