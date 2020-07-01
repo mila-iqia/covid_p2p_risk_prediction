@@ -42,7 +42,7 @@ model:
     num_encounter_partner_id_bits: 16
     num_heads: 4
     num_health_history_features: 28
-    num_health_profile_features: 12
+    num_health_profile_features: 13
     block_capacity: 128
     block_types: rrrsr
     srb_aggregation: max
