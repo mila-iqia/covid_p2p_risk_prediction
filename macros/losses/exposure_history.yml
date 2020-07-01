@@ -9,3 +9,7 @@ losses:
     exposure: {}
   weights:
     exposure: 1.0
+
+training:
+  checkpoint:
+    early_stopping_metric: exposure

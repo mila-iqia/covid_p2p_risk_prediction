@@ -12,3 +12,7 @@ losses:
   weights:
     exposure: 1.0
     viral_load: 1.0
+
+training:
+  checkpoint:
+    early_stopping_metric: exposure
