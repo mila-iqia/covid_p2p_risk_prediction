@@ -1,0 +1,14 @@
+model:
+  kwargs:
+    latent_variable_output_features:
+      exposure_history: 1
+      viral_load_history: 1
+
+losses:
+  __speedrun__: __purge__
+  kwargs:
+    exposure: {}
+    viral_load: {}
+  weights:
+    exposure: 1.0
+    viral_load: 1.0
