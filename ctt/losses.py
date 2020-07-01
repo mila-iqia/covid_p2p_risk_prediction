@@ -12,6 +12,8 @@ from ctt.utils import typed_sum_pool
 def get_class(key):
     KEY_CLASS_MAPPING = {
         "infectiousness": InfectiousnessLoss,
+        "viral_load": ViralLoadLoss,
+        "exposure": ExposureHistoryLoss,
         "contagion": ContagionLoss,
     }
     return KEY_CLASS_MAPPING[key]
@@ -122,15 +124,68 @@ class InfectiousnessLoss(nn.Module):
             self.masked_loss = EntityMaskedLoss(nn.MSELoss)
 
     def forward(self, model_input, model_output):
-        assert model_output.latent_variable.dim() == 3, (
+        key = (
+            "latent_variable"
+            if "latent_variable" in model_output
+            else "infectiousness_history"
+        )
+        predicted_infectiousness_history = model_output[key]
+        assert predicted_infectiousness_history.dim() == 3, (
             "Infectiousness Loss can only be used on (temporal) "
             "set-valued latent variables."
         )
         # This will block gradients to the entities that are invalid
         return self.masked_loss(
-            model_output.latent_variable,
+            predicted_infectiousness_history,
             model_input.infectiousness_history,
             model_input["valid_history_mask"],
+        )
+
+
+class ViralLoadLoss(InfectiousnessLoss):
+    def forward(self, model_input, model_output):
+        key = (
+            "latent_variable"
+            if "latent_variable" in model_output
+            else "viral_load_history"
+        )
+        predicted_viral_load_history = model_output[key]
+        assert predicted_viral_load_history.dim() == 3, (
+            "Infectiousness Loss can only be used on (temporal) "
+            "set-valued latent variables."
+        )
+        # This will block gradients to the entities that are invalid
+        return self.masked_loss(
+            predicted_viral_load_history,
+            model_input.viral_load_history,
+            model_input["valid_history_mask"],
+        )
+
+
+class ExposureHistoryLoss(nn.Module):
+    def __init__(self):
+        super(ExposureHistoryLoss, self).__init__()
+        self.masked_loss = EntityMaskedLoss(nn.BCEWithLogitsLoss)
+
+    def forward(self, model_input, model_output):
+        key = (
+            "latent_variable"
+            if "latent_variable" in model_output
+            else "exposure_history"
+        )
+        predicted_exposure_history = model_output[key]
+        # shape = BT1
+        assert predicted_exposure_history.dim() == 3, (
+            "Infectiousness Loss can only be used on (temporal) "
+            "set-valued latent variables."
+        )
+        # We could have predicted the presoftmax logits, but then the masking gets
+        # tricky. Predicting presigmoid logits instead is intuitive, straightforward,
+        # and faster + it should have the same effect.
+        return self.masked_loss(
+            predicted_exposure_history,
+            model_input.exposure_history,
+            model_input["valid_history_mask"]
         )
 
 

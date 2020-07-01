@@ -589,7 +589,7 @@ class ContactDataset(Dataset):
         exposed_at_day = np.zeros(shape=(14,))
         if exposed_since is not None and exposed_since < 14:
             exposed_at_day[exposed_since] = 1
-        return exposed_at_day
+        return exposed_at_day[:, None]
 
     def _fetch_encounter_message(self, encounter_message, num_encounters):
         if self.bit_encoded_messages:

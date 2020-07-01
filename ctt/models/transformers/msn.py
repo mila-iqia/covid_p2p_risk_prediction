@@ -170,11 +170,23 @@ class MixSetNet(_MixSetNet):
             nn.Linear(capacity, encounter_output_features),
         )
         # Latent variables
-        latent_variable_mlp = nn.Sequential(
-            nn.Linear(block_capacity + block_metadata_dim, capacity),
-            nn.ReLU(),
-            nn.Linear(capacity, latent_variable_output_features),
-        )
+        if isinstance(latent_variable_output_features, int):
+            latent_variable_mlp = nn.Sequential(
+                nn.Linear(block_capacity + block_metadata_dim, capacity),
+                nn.ReLU(),
+                nn.Linear(capacity, latent_variable_output_features),
+            )
+        elif isinstance(latent_variable_output_features, dict):
+            latent_variable_mlp = {}
+            for key in latent_variable_output_features:
+                latent_variable_mlp[key] = nn.Sequential(
+                    nn.Linear(block_capacity + block_metadata_dim, capacity),
+                    nn.ReLU(),
+                    nn.Linear(capacity, latent_variable_output_features[key]),
+                )
+            latent_variable_mlp = nn.ModuleDict(latent_variable_mlp)
+        else:
+            raise TypeError
         # ------- Output placeholders -------
         # noinspection PyArgumentList
         message_placeholder = nn.Parameter(torch.randn((message_embedding_dim,)))
