@@ -111,8 +111,9 @@ def _profile(num_trials, experiment_directory):
 
     print("Loading data...")
     data_path = (
-        "../../data/sim_v2_people-1000_days-30_init-0.003_seed-0_20200509"
-        "-182246-output.zip"
+        "/Users/nrahaman/Python/ctt/data/payload/sim_v2_people-1000_days-30_init"
+        "-0.003570583805768116_uptake-0.9814107861305532_seed-3098_20200629-230107_"
+        "414875.zip"
     )
     dataset = ContactDataset(path=data_path, preload=True)
     human_day_infos = [
@@ -120,6 +121,10 @@ def _profile(num_trials, experiment_directory):
     ]
 
     engine = InferenceEngine(experiment_directory)
+    print(
+        "This number should be 13: ",
+        engine.model.health_profile_embedding[0].in_features,
+    )
     _ = engine.infer(human_day_infos[0])
 
     print(f"Profiling {experiment_directory}...")
@@ -133,5 +138,5 @@ def _profile(num_trials, experiment_directory):
 
 if __name__ == "__main__":
     # _profile(500, "/Users/nrahaman/Python/ctt/tmp/DEBUG-DCTT-MOREXA-0")
-    _profile(1000, "/Users/nrahaman/Python/ctt/tmp/FRESH-SNOWFLAKE-224B")
-    _profile(1000, "/Users/nrahaman/Python/ctt/tmp/WINTER-MOON-285")
+    _profile(1, "/Users/nrahaman/Python/ctt/tmp/TWILIGHT-RAIN-696")
+    # _profile(1000, "/Users/nrahaman/Python/ctt/tmp/WINTER-MOON-285")
