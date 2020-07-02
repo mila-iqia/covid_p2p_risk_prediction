@@ -431,7 +431,7 @@ class ContactDataset(Dataset):
         infectiousness_history, mask_head = self._fetch_infectiousness_history(
             human_day_info, future_human_day_info
         )
-        viral_load_history = self._fetch_viral_load_history(
+        viral_load_history, vl2i_multiplier = self._fetch_viral_load_history(
             infectiousness_history, human_day_info
         )
         exposure_history = self._fetch_exposure_history(human_day_info)
@@ -495,6 +495,7 @@ class ContactDataset(Dataset):
             sex=torch.from_numpy(sex).float(),
             infectiousness_history=torch.from_numpy(infectiousness_history).float(),
             viral_load_history=torch.from_numpy(viral_load_history).float(),
+            vl2i_multiplier=torch.from_numpy(vl2i_multiplier).float(),
             exposure_history=torch.from_numpy(exposure_history).float(),
             history_days=torch.from_numpy(history_days).float(),
             valid_history_mask=torch.from_numpy(valid_history_mask).float(),
@@ -576,13 +577,15 @@ class ContactDataset(Dataset):
         ]
         if multiplier is not None:
             viral_load_history = infectiousness_history / multiplier
+            multiplier = np.array([multiplier]).astype("float32")
         else:
             assert infectiousness_history.sum() == 0, (
                 "Human is infectious but `viral_load_to_infectiousness_multiplier`"
                 " is None."
             )
             viral_load_history = infectiousness_history
-        return viral_load_history
+            multiplier = np.array([0.]).astype("float32")
+        return viral_load_history, multiplier
 
     def _fetch_exposure_history(self, human_day_info):
         exposed_since = human_day_info["unobserved"]["exposure_day"]

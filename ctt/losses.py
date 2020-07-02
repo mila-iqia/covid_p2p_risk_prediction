@@ -14,6 +14,7 @@ def get_class(key):
         "infectiousness": InfectiousnessLoss,
         "viral_load": ViralLoadLoss,
         "exposure": ExposureHistoryLoss,
+        "vl2i": VL2IMultiplierLoss,
         "contagion": ContagionLoss,
     }
     return KEY_CLASS_MAPPING[key]
@@ -160,6 +161,13 @@ class ViralLoadLoss(InfectiousnessLoss):
             model_input.viral_load_history,
             model_input["valid_history_mask"],
         )
+
+
+class VL2IMultiplierLoss(nn.Module):
+    def forward(self, model_input, model_output):
+        predicted_vl2i_multiplier = model_output["vl2i_multiplier"][:, 0]
+        target_vl2i_multiplier = model_input["vl2i_multiplier"]
+        return F.mse_loss(predicted_vl2i_multiplier, target_vl2i_multiplier)
 
 
 class ExposureHistoryLoss(nn.Module):
