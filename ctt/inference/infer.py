@@ -84,7 +84,7 @@ class InferenceEngine(BaseExperiment):
         model.eval()
         return model
 
-    def infer(self, human_day_info):
+    def infer(self, human_day_info, return_full_output=False):
         with torch.no_grad():
             model_input = self.preprocessor.preprocess(human_day_info, as_batch=True)
             model_output = self.model(model_input.to_dict())
@@ -102,7 +102,14 @@ class InferenceEngine(BaseExperiment):
             # Nasim, don't you remember how bad unconditional squeezes effed you up
             # back in the days?
             infectiousness = model_output["latent_variable"].numpy()[0].squeeze()
-        return dict(contagion_proba=contagion_proba, infectiousness=infectiousness)
+        if not return_full_output:
+            return dict(contagion_proba=contagion_proba, infectiousness=infectiousness)
+        else:
+            return dict(
+                contagion_proba=contagion_proba,
+                infectiousness=infectiousness,
+                **model_output,
+            )
 
 
 def _profile(num_trials, experiment_directory):
