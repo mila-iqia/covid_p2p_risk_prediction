@@ -175,3 +175,7 @@ def set_infectiousness_bins(value=None):
     if value is not None:
         _INFECTIOUSNESS_BINS = value
     return _INFECTIOUSNESS_BINS
+
+
+class CodepathNotReadyError(Exception):
+    pass

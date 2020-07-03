@@ -4,6 +4,7 @@ from contextlib import contextmanager
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 import ctt.utils as cu
 from ctt.utils import Compose
@@ -309,6 +310,51 @@ class DigitizeInfectiousness(Transform):
         output_dict["latent_variable"] = dequantized_infectiousness
         return output_dict
 
+
+class ViralLoadToInfectiousness(Transform):
+    def __init__(self, multiplier=0.5, override_vl2i=False):
+        self.multiplier = multiplier
+        self.override_vl2i = override_vl2i
+
+    def inverse_apply(self, output_dict):
+        assert "viral_load_history" in output_dict
+        if "vl2i_multiplier" in output_dict and not self.override_vl2i:
+            multiplier = output_dict["vl2i_multiplier"][:, 0:1, 0:1]
+        else:
+            multiplier = self.multiplier
+        infectiousness_history = output_dict["viral_load_history"] * multiplier
+        output_dict["latent_variable"] = infectiousness_history
+        output_dict["infectiousness_history"] = infectiousness_history
+        return output_dict
+
+
+class ExposureHistoryToProbaInfected(Transform):
+    def __init__(self, proba_infected_mapping):
+        proba_infected_mapping = np.asarray(proba_infected_mapping)
+        proba_infected_mapping = proba_infected_mapping / proba_infected_mapping.sum()
+        cdf_infected_mapping = np.cumsum(proba_infected_mapping)
+        self.pdf_infected_mapping = torch.from_numpy(proba_infected_mapping)
+        self.cdf_infected_mapping = torch.from_numpy(cdf_infected_mapping)
+
+    def inverse_apply(self, output_dict):
+        raise cu.CodepathNotReadyError
+        # exposure_history = output_dict["exposure_history"]
+        # assert exposure_history.shape[0] == 1
+        # if exposure_history.dim() == 3:
+        #     assert exposure_history.shape[-1] == 1
+        #     exposure_history = exposure_history[:, :, 0]
+        # # Get the proba of being infected in one of the previous days
+        # exposure_logits = torch.cat([exposure_history, torch.zeros(1, 1)], dim=1)
+        # exposure_probas = torch.softmax(exposure_logits, dim=1)
+        # exposure_history_proba, unknown_proba = (
+        #     exposure_probas[:, :-1],
+        #     exposure_probas[:, -1:],
+        # )
+        # infectiousness_proba_history = F.conv1d(
+        #     F.pad(exposure_history_proba, [0, 13], "constant").reshape(1, 1, -1),
+        #     self.pdf_infected_mapping.reshape(1, 1, -1),
+        # )[0, 0]
+        # infectiousness_proba_history = None
 
 # ------------------------------
 # ------- Pre-Transforms -------
