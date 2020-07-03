@@ -312,14 +312,17 @@ class DigitizeInfectiousness(Transform):
 
 
 class ViralLoadToInfectiousness(Transform):
-    def __init__(self, multiplier=0.5, override_vl2i=False):
+    def __init__(self, multiplier=0.5, override_vl2i=False, vl2i_clip_min=None):
         self.multiplier = multiplier
         self.override_vl2i = override_vl2i
+        self.vl2i_clip_min = vl2i_clip_min
 
     def inverse_apply(self, output_dict):
         assert "viral_load_history" in output_dict
         if "vl2i_multiplier" in output_dict and not self.override_vl2i:
             multiplier = output_dict["vl2i_multiplier"][:, 0:1, 0:1]
+            if self.vl2i_clip_min is not None:
+                multiplier = multiplier.clamp_min(self.vl2i_clip_min)
         else:
             multiplier = self.multiplier
         infectiousness_history = output_dict["viral_load_history"] * multiplier
