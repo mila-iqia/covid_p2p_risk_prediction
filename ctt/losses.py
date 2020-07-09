@@ -4,6 +4,7 @@ from addict import Dict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributions as td
 
 from ctt.models.modules import EntityMasker
 from ctt.utils import typed_sum_pool
@@ -54,6 +55,31 @@ class SmoothedBinLoss(nn.Module):
         return loss
 
 
+class GaussianLogLikLoss(nn.Module):
+    def __init__(self, reduction="mean"):
+        super(GaussianLogLikLoss, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, input, target):
+        assert input.dim() == 3
+        assert input.shape[-1] == 2
+        if target.dim() == 2:
+            target = target[:, :, None]
+        else:
+            assert target.dim() == 3
+            assert target.shape[-1] == 1
+        normal = td.Normal(loc=input[:, :, 0:1], scale=torch.exp(input[:, :, 1:2]))
+        unreduced_loss = -(normal.log_prob(target))
+        if self.reduction == "mean":
+            return unreduced_loss.mean()
+        elif self.reduction == "sum":
+            return unreduced_loss.sum()
+        elif self.reduction == "none":
+            return unreduced_loss
+        else:
+            raise ValueError(f"Unknown reduction: {self.reduction}.")
+
+
 class EntityMaskedLoss(nn.Module):
     EPS = 1e-7
 
@@ -62,7 +88,13 @@ class EntityMaskedLoss(nn.Module):
         self.loss_fn = loss_cls(reduction="none")
         assert isinstance(
             self.loss_fn,
-            (nn.MSELoss, nn.BCEWithLogitsLoss, nn.CrossEntropyLoss, SmoothedBinLoss),
+            (
+                nn.MSELoss,
+                GaussianLogLikLoss,
+                nn.BCEWithLogitsLoss,
+                nn.CrossEntropyLoss,
+                SmoothedBinLoss,
+            ),
         )
 
     def forward(self, input, target, mask):
@@ -110,7 +142,7 @@ class EntityMaskedLoss(nn.Module):
 
 
 class InfectiousnessLoss(nn.Module):
-    def __init__(self, binned=False, spillage=None, gamma=2.0):
+    def __init__(self, nll_loss_fn="MSELoss", binned=False, spillage=None, gamma=2.0):
         super(InfectiousnessLoss, self).__init__()
         if binned:
             if spillage is None:
@@ -122,7 +154,8 @@ class InfectiousnessLoss(nn.Module):
                     )
                 )
         else:
-            self.masked_loss = EntityMaskedLoss(nn.MSELoss)
+            loss_fn = getattr(nn, nll_loss_fn, None) or globals()[nll_loss_fn]
+            self.masked_loss = EntityMaskedLoss(loss_fn)
 
     def forward(self, model_input, model_output):
         key = (
@@ -193,7 +226,7 @@ class ExposureHistoryLoss(nn.Module):
         return self.masked_loss(
             predicted_exposure_history,
             model_input.exposure_history,
-            model_input["valid_history_mask"]
+            model_input["valid_history_mask"],
         )
 
 

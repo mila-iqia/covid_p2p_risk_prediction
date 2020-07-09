@@ -1,0 +1,10 @@
+model:
+  kwargs:
+    latent_variable_output_features:
+      infectiousness_history: 2
+
+
+losses:
+  kwargs:
+    infectiousness:
+      nll_loss_fn: GaussianLogLikLoss
