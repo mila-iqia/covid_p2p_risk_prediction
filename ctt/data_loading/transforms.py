@@ -331,6 +331,28 @@ class ViralLoadToInfectiousness(Transform):
         return output_dict
 
 
+class MuPlusAlphaSigmaInfectiousness(Transform):
+    def __init__(self, alpha=0.0):
+        """
+        Parameters
+        ----------
+        alpha : float
+            This is the alpha we use for predicting mu + (alpha * sigma).
+        """
+        self.alpha = alpha
+
+    def inverse_apply(self, output_dict):
+        assert output_dict["infectiousness_history"].shape[-1] == 2
+        mu, sigma = (
+            output_dict["infectiousness_history"][:, :, 0:1],
+            output_dict["infectiousness_history"][:, :, 1:2],
+        )
+        output_dict["latent_variable"] = output_dict["infectiousness_history"] = mu + (
+            self.alpha * sigma
+        )
+        return output_dict
+
+
 class ExposureHistoryToProbaInfected(Transform):
     def __init__(self, proba_infected_mapping):
         proba_infected_mapping = np.asarray(proba_infected_mapping)
@@ -358,6 +380,7 @@ class ExposureHistoryToProbaInfected(Transform):
         #     self.pdf_infected_mapping.reshape(1, 1, -1),
         # )[0, 0]
         # infectiousness_proba_history = None
+
 
 # ------------------------------
 # ------- Pre-Transforms -------
