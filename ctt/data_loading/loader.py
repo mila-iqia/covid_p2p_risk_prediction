@@ -151,7 +151,7 @@ class ContactDataset(Dataset):
         return os.path.join(self.path, "train_priors.pkl")
 
     @classmethod
-    def is_dataset_path(cls, path):
+    def is_dataset_path(cls, path: str):
         return (
             os.path.exists(path)
             and os.path.isdir(path)

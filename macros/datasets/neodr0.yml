@@ -7,7 +7,6 @@ data:
     mask_current_day_encounters: true
     num_datasets_to_select: 10
     num_workers: 10
-    preload: true
     relative_days: true
     shuffle: true
   paths:
