@@ -8,6 +8,7 @@ import io
 from copy import deepcopy
 import warnings
 import random
+import h5py as h5
 
 import numpy as np
 import torch
@@ -59,6 +60,14 @@ class ContactDataset(Dataset):
         "encounter_is_contagion": ["encounter_is_contagion", slice(None)],
     }
 
+    TIME_VARYING_META_KEYS = {
+        "hospitalization_per_day",
+        "positive_test_results_per_day",
+        "negative_test_results_per_day",
+        "tested_per_day",
+        "i_per_day",
+    }
+
     # Compat with previous versions of the dataset
     # Age
     DEFAULT_AGE = 0
@@ -87,7 +96,6 @@ class ContactDataset(Dataset):
         mask_current_day_encounters=False,
         transforms=None,
         pre_transforms=None,
-        preload=False,
     ):
         """
         Parameters
@@ -117,9 +125,6 @@ class ContactDataset(Dataset):
         pre_transforms : callable
             Transform that applies directly from to the data that is read
             from file, and before any further processing
-        preload : bool
-            If path points to a zipfile, load the entire file to RAM (as a
-            BytesIO object).
         """
         # Private
         self._num_id_bits = 16
@@ -133,54 +138,48 @@ class ContactDataset(Dataset):
         self.mask_current_day_encounters = mask_current_day_encounters
         self.transforms = transforms
         self.pre_transforms = pre_transforms
-        self.preload = preload
         # Prepwork
-        self._preloaded = None
         self._read_data()
         self._set_input_fields_to_slice_mapping()
 
+    @property
+    def hdf5_path(self):
+        return os.path.join(self.path, "train.hdf5")
+
+    @property
+    def meta_info_path(self):
+        return os.path.join(self.path, "train_priors.pkl")
+
+    @classmethod
+    def is_dataset_path(cls, path):
+        return (
+            os.path.exists(path)
+            and os.path.isdir(path)
+            and os.path.exists(os.path.join(path, "train.hdf5"))
+            and os.path.exists(os.path.join(path, "train_priors.pkl"))
+        )
+
     def _read_data(self):
-        assert self.path.endswith(".zip")
-        if self.preload:
-            with open(self.path, "rb") as f:
-                buffer = io.BytesIO(f.read())
-            buffer.seek(0)
-            self._preloaded = zipfile.ZipFile(buffer)
-            files = self._preloaded.namelist()
+        if self.path is not None:
+            assert os.path.isdir(self.path), "Path must be a directory."
+            assert os.path.exists(
+                self.hdf5_path
+            ), f"Expecting a train.hdf5 in {self.path}, but found none."
+            assert os.path.exists(
+                os.path.join(self.path, "train_priors.pkl")
+            ), f"Expecting a train_priors.pkl in {self.path}, but found none."
+            self._preloaded = h5.File(self.hdf5_path, "r+")
+            with open(self.meta_info_path, "rb") as f:
+                self._meta_info = pickle.load(f)
+            # This is an array of shape N3 where N is
+            self._data_indices = np.array(
+                np.asarray(self._preloaded["is_filled"]).nonzero()
+            ).T
+            self._num_days, _, self._num_humans = self._preloaded["dataset"].shape
         else:
-            with zipfile.ZipFile(self.path) as zf:
-                files = zipfile.ZipFile.namelist(zf)
-
-        # Filter to keep only the pickles
-        files = [f for f in files if f.endswith(".pkl") and "daily_human" in f]
-
-        def extract_components(file):
-            components = file.split("/")[-3:]
-            return int(components[0]), int(components[1])
-
-        day_idxs, human_idxs = zip(
-            *[
-                extract_components(file)
-                for file in files
-                if (file.endswith(".pkl") and not file.startswith("__MACOSX"))
-            ]
-        )
-
-        # Set list of files
-        self._files = files
-        # Set the offsets as required
-        self._day_idx_offset = min(day_idxs)
-        self._human_idx_offset = min(human_idxs)
-        # Compute numbers of days and humans
-        self._num_days = max(day_idxs) - self._day_idx_offset + 1
-        self._num_humans = max(human_idxs) - self._human_idx_offset + 1
-        # Compute number of slots / day
-        _find_slots = (
-            lambda x: f"daily_outputs/{self._day_idx_offset}/"
-            f"{self._human_idx_offset}/daily_human-" in x
-        )
-        self._num_slots = len(list(filter(_find_slots, files)))
-        assert self._num_slots > 0
+            self._preloaded = None
+            self._data_indices = np.zeros((0, 3))
+            self._num_days, self._num_humans = 0, 0
 
     def _set_input_fields_to_slice_mapping(self):
         self._input_fields_to_slice_mapping = deepcopy(
@@ -196,104 +195,39 @@ class ContactDataset(Dataset):
     def num_days(self):
         return self._num_days
 
-    @property
-    def num_slots(self):
-        return self._num_slots
-
-    def _find_file(self, human_idx, day_idx, slot_idx):
-        assert human_idx < self.num_humans
-        assert day_idx < self.num_days
-        assert slot_idx < self.num_slots
-        _find_slots = (
-            lambda x: f"daily_outputs/{day_idx + self._day_idx_offset}/"
-            f"{human_idx + self._human_idx_offset}/daily_human-" in x
-        )
-
-        all_slots = sorted(
-            list(filter(_find_slots, self._files)),
-            key=lambda x: self._parse_file(x)[-1],
-        )
-        try:
-            return all_slots[slot_idx]
-        except IndexError:
-            if len(all_slots) == 0:
-                raise ValueError(
-                    f"No slots found for human {human_idx}, day {day_idx}!"
-                )
-            else:
-                warnings.warn(
-                    f"Tried to access slot {slot_idx} for human {human_idx} "
-                    f"and day {day_idx}, but only {len(all_slots)} slots are "
-                    f"available -- using a random slot."
-                )
-                return random.choice(all_slots)
-
-    def _parse_file(self, file_name, find_relative_slot_idx=False):
-        components = file_name.split("/")[-3:]
-        # components[2] is always "daily-human", if you're wondering
-        day_idx, human_idx, slot_idx = (
-            int(components[0]),
-            int(components[1]),
-            int(components[2].strip("daily_human-.pkl")),
-        )
-        day_idx -= self._day_idx_offset
-        human_idx -= self._human_idx_offset
-        if find_relative_slot_idx:
-            # Find all the slots of the day
-            _find_slots = (
-                lambda x: f"daily_outputs/{day_idx + self._day_idx_offset}/"
-                f"{human_idx + self._human_idx_offset}/daily_human-" in x
-            )
-            matching_files = sorted(
-                list(filter(_find_slots, self._files)),
-                key=lambda x: int(x.split("/")[-3:][2].strip("daily_human-.pkl")),
-            )
-            slot_idx = matching_files.index(file_name)
-        return day_idx, human_idx, slot_idx
-
     def __len__(self):
-        return len(self._files)
+        return self._data_indices.shape[0]
 
-    def read(self, human_idx=None, day_idx=None, slot_idx=None, file_name=None):
-        # Priority goes to file_name
-        if file_name is None:
-            assert None not in [human_idx, day_idx, slot_idx]
-            file_name = self._find_file(human_idx, day_idx, slot_idx)
-        assert self.path.endswith(".zip"), "Only zipfiles supported"
-        # We're working with a zipfile
-        # Check if we have the content preload to RAM
-        if self._preloaded is not None:
-            self._preloaded: zipfile.ZipFile
-            with self._preloaded.open(file_name, "r") as f:
-                return pickle.load(f)
-        else:
-            # Read zip archive from path, and then read content
-            # from archive
-            with zipfile.ZipFile(self.path) as zf:
-                with zf.open(file_name, "r") as f:
-                    return pickle.load(f)
+    def read(self, human_idx=None, day_idx=None, slot_idx=None, flat_idx=None):
+        if flat_idx is not None:
+            day_idx, slot_idx, human_idx = self._data_indices[flat_idx]
+        try:
+            human_day_info = pickle.loads(
+                self._preloaded["dataset"][day_idx, slot_idx, human_idx]
+            )
+        except EOFError:
+            raise ValueError(
+                f"No stats found for human {human_idx} at day "
+                f"{day_idx} and slot {slot_idx}."
+            )
+        human_day_info.update({"human_idx": human_idx, "slot_idx": slot_idx})
+        return human_day_info
 
-    def _read_first_slot_of_next_day(
-        self, human_idx=None, day_idx=None, slot_idx=None, file_name=None
-    ):
-        # Priority goes to file_name
-        if file_name is not None:
-            human_idx, day_idx, slot_idx = self._parse_file(file_name)
-        day_idx += 1
-        # Without this extra if clause, this will fail if day_idx is too big.
-        # With this check, it'll only make the function return None, something
-        # that will be handled downstream.
-        if day_idx < self.num_days:
-            return self.read(human_idx=human_idx, day_idx=day_idx, slot_idx=0)
-        else:
-            return None
+    def read_meta(self, human_idx=None, day_idx=None, flat_idx=None):
+        if flat_idx is None:
+            human_idx, _, day_idx = self._data_indices[flat_idx]
+        time_varying_meta = {
+            self._meta_info[key][day_idx] for key in self.TIME_VARYING_META_KEYS
+        }
+        human_meta = self._meta_info["humans"][f"human:{human_idx}"]
+        return {"time_varying": time_varying_meta, "human": human_meta}
 
     def get(
         self,
         human_idx: int = None,
         day_idx: int = None,
         slot_idx: int = None,
-        file_name: str = None,
+        flat_idx: str = None,
         human_day_info: dict = None,
     ) -> Dict:
         """
@@ -305,8 +239,8 @@ class ContactDataset(Dataset):
             Index of the day. Optional if file_name is provided.
         slot_idx : int
             Index of the update slot of day. Optional if file_name is provided.
-        file_name : str
-            Name of the file to load from. Optional if human_idx, day_idx
+        flat_idx : str
+            Index of the data-point. Optional if human_idx, day_idx
             and slot_idx is provided, but overrides the latter if provided.
         human_day_info : dict
             If provided, use this dictionary instead of the content of the
@@ -354,11 +288,9 @@ class ContactDataset(Dataset):
                     of shape (M, 1).
         """
         if human_day_info is None:
-            human_day_info = self.read(human_idx, day_idx, slot_idx, file_name)
+            human_day_info = self.read(human_idx, day_idx, slot_idx, flat_idx)
             if self.forward_prediction:
-                future_human_day_info = self._read_first_slot_of_next_day(
-                    human_idx, day_idx, slot_idx, file_name
-                )
+                raise NotImplementedError
             else:
                 # Future is not needed, so we don't waste time loading it
                 future_human_day_info = None
@@ -367,6 +299,10 @@ class ContactDataset(Dataset):
             # not available.
             future_human_day_info = None
         day_idx = human_day_info["current_day"]
+        if human_idx is None:
+            human_idx = human_day_info.get("human_idx", None)
+        else:
+            assert human_idx == human_day_info["human_idx"]
         if human_idx is None:
             human_idx = -1
         # Apply any pre-transforms
@@ -450,6 +386,7 @@ class ContactDataset(Dataset):
             health_at_encounter = np.zeros(
                 (0, health_history.shape[-1]), dtype=health_history.dtype
             )
+        # TODO: Get prevalence-related variables at the time of encounter
         # Get current epidemiological compartment
         currently_infected = (
             infectiousness_history[(0 if not self.forward_prediction else 1), 0] > 0.0
@@ -584,7 +521,7 @@ class ContactDataset(Dataset):
                 " is None."
             )
             viral_load_history = infectiousness_history
-            multiplier = np.array([0.]).astype("float32")
+            multiplier = np.array([0.0]).astype("float32")
         return viral_load_history, multiplier
 
     def _fetch_exposure_history(self, human_day_info):
@@ -629,20 +566,11 @@ class ContactDataset(Dataset):
             [symptoms, human_day_info["observed"]["test_results"][:, None],], axis=1,
         )
 
+    def _fetch_prevalence_history(self, day_idx):
+        raise NotImplementedError
+
     def __getitem__(self, item):
-        while True:
-            try:
-                file_name = self._files[item]
-                day_idx, human_idx, slot_idx = self._parse_file(file_name)
-                return self.get(
-                    human_idx=human_idx,
-                    day_idx=day_idx,
-                    slot_idx=slot_idx,
-                    file_name=file_name,
-                )
-            except InvalidSetSize:
-                item = (item + 1) % len(self)
-                continue
+        return self.get(flat_idx=item)
 
     @classmethod
     def collate_fn(cls, batch):
@@ -766,11 +694,16 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
     path = dataset_kwargs.pop("path")
     num_datasets_to_select = dataset_kwargs.pop("num_datasets_to_select", None)
     if isinstance(path, str):
-        if os.path.isdir(path):
+        if not ContactDataset.is_dataset_path(path):
             # This code-path supports the case where path is a directory of zip files.
             # If `num_datasets_to_select` is None, then all zips in the directory are
             # selected.
-            paths = [p for p in os.listdir(path) if p.endswith(".zip")]
+            paths = [
+                p
+                for p in os.listdir(path)
+                if ContactDataset.is_dataset_path(os.path.join(path, p))
+            ]
+            assert len(paths) > 0, f"No dataset paths found in directory: {path}"
             if num_datasets_to_select is not None:
                 rng = np.random.RandomState() if rng is None else rng
                 paths = rng.choice(
@@ -793,12 +726,11 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
             dataset = ConcatDataset(dataset)
         else:
             # This codepath supports the case where path points to a zip.
-            assert os.path.exists(path) and path.endswith(".zip")
             dataset = ContactDataset(path=path, **dataset_kwargs)
     elif isinstance(path, (list, tuple)):
         # This codepath supports the case where path is a list of paths pointing
         # to zips.
-        assert all([os.path.exists(p) and p.endswith(".zip") for p in path])
+        assert all([ContactDataset.is_dataset_path(p) for p in path])
         dataset = ConcatDataset(
             [ContactDataset(path=p, **dataset_kwargs) for p in path]
         )
