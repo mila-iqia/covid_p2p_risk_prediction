@@ -168,7 +168,11 @@ class ContactDataset(Dataset):
             assert os.path.exists(
                 os.path.join(self.path, "train_priors.pkl")
             ), f"Expecting a train_priors.pkl in {self.path}, but found none."
-            self._preloaded = h5.File(self.hdf5_path, "r")
+            with h5.File(self.hdf5_path, "r") as h5_file:
+                self._preloaded = {
+                    "dataset": np.asarray(h5_file["dataset"]),
+                    "is_filled": np.asarray(h5_file["is_filled"]),
+                }
             with open(self.meta_info_path, "rb") as f:
                 self._meta_info = pickle.load(f)
             # This is an array of shape N3 where N is
@@ -660,7 +664,7 @@ class ContactDataset(Dataset):
         return tensor[..., slice_]
 
     def __del__(self):
-        if self._preloaded is not None:
+        if self._preloaded is not None and hasattr(self._preloaded, "close"):
             self._preloaded.close()
 
 
