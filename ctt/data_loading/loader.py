@@ -168,7 +168,7 @@ class ContactDataset(Dataset):
             assert os.path.exists(
                 os.path.join(self.path, "train_priors.pkl")
             ), f"Expecting a train_priors.pkl in {self.path}, but found none."
-            self._preloaded = h5.File(self.hdf5_path, "r+")
+            self._preloaded = h5.File(self.hdf5_path, "r")
             with open(self.meta_info_path, "rb") as f:
                 self._meta_info = pickle.load(f)
             # This is an array of shape N3 where N is
