@@ -674,6 +674,7 @@ class ContactPreprocessor(ContactDataset):
         super(ContactPreprocessor, self).__init__(path=None, **kwargs)
         self._num_humans = 1
         self._num_days = 1
+        self._preloaded = None
 
     def _read_data(self):
         # Defuse this method since it's not needed anymore
