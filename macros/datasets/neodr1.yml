@@ -1,0 +1,21 @@
+data:
+  __speedrun__: __purge__
+  loader_kwargs:
+    batch_size: 1024
+    bit_encoded_messages: false
+    clip_history_days: false
+    mask_current_day_encounters: true
+    num_datasets_to_select: null
+    num_workers: 10
+    relative_days: true
+    shuffle: true
+  paths:
+    train: /home/nrahaman/python/covi-simulator/exp/neodr1/train
+    validate: /home/nrahaman/python/covi-simulator/exp/neodr1/val
+  validation_loader_kwargs:
+    num_datasets_to_select: null
+
+
+training:
+  # Each epoch is 20x larger; 10 new epochs ==> 20 old epochs
+  num_epochs: 10
