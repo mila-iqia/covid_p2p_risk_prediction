@@ -1,14 +1,9 @@
 import pickle
 from addict import Dict
 import os
-import glob
 from typing import Union
-import zipfile
-import io
 from copy import deepcopy
-import warnings
-import random
-import h5py as h5
+import zarr
 
 import numpy as np
 import torch
@@ -147,6 +142,10 @@ class ContactDataset(Dataset):
         return os.path.join(self.path, "train.hdf5")
 
     @property
+    def zarr_path(self):
+        return os.path.join(self.path, "train.zarr")
+
+    @property
     def meta_info_path(self):
         return os.path.join(self.path, "train_priors.pkl")
 
@@ -155,7 +154,7 @@ class ContactDataset(Dataset):
         return (
             os.path.exists(path)
             and os.path.isdir(path)
-            and os.path.exists(os.path.join(path, "train.hdf5"))
+            and os.path.exists(os.path.join(path, "train.zarr"))
             and os.path.exists(os.path.join(path, "train_priors.pkl"))
         )
 
@@ -163,16 +162,12 @@ class ContactDataset(Dataset):
         if self.path is not None:
             assert os.path.isdir(self.path), "Path must be a directory."
             assert os.path.exists(
-                self.hdf5_path
-            ), f"Expecting a train.hdf5 in {self.path}, but found none."
+                self.zarr_path
+            ), f"Expecting a train.zarr in {self.path}, but found none."
             assert os.path.exists(
                 os.path.join(self.path, "train_priors.pkl")
             ), f"Expecting a train_priors.pkl in {self.path}, but found none."
-            with h5.File(self.hdf5_path, "r") as h5_file:
-                self._preloaded = {
-                    "dataset": np.asarray(h5_file["dataset"]),
-                    "is_filled": np.asarray(h5_file["is_filled"]),
-                }
+            self._preloaded = zarr.open(self.zarr_path, "r")
             with open(self.meta_info_path, "rb") as f:
                 self._meta_info = pickle.load(f)
             # This is an array of shape N3 where N is
@@ -206,9 +201,7 @@ class ContactDataset(Dataset):
         if flat_idx is not None:
             day_idx, slot_idx, human_idx = self._data_indices[flat_idx]
         try:
-            human_day_info = pickle.loads(
-                self._preloaded["dataset"][day_idx, slot_idx, human_idx]
-            )
+            human_day_info = self._preloaded["dataset"][day_idx, slot_idx, human_idx]
         except EOFError:
             raise ValueError(
                 f"No stats found for human {human_idx} at day "
