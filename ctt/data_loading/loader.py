@@ -3,6 +3,7 @@ from addict import Dict
 import os
 from typing import Union, List
 from copy import deepcopy
+from contextlib import contextmanager
 import zarr
 import gc
 
@@ -711,19 +712,26 @@ class ContactDatastream(IterableDataset):
 
     def _iter(self):
         for dataset in self.datasets:
-            # Load to RAM
-            dataset.load_in_memory()
-            if self.shuffle_in_dataset:
-                idxs = np.random.permutation(len(dataset))
-            else:
-                idxs = range(len(dataset))
-            for idx in idxs:
-                yield dataset[idx]
-            # Offload from RAM
-            dataset.offload_from_memory()
+            with self.in_memory(dataset):
+                if self.shuffle_in_dataset:
+                    idxs = np.random.permutation(len(dataset))
+                else:
+                    idxs = range(len(dataset))
+                for idx in idxs:
+                    yield dataset[idx]
 
     def __iter__(self):
         return self._iter()
+
+    def __len__(self):
+        return sum([len(dataset) for dataset in self.datasets])
+
+    @staticmethod
+    @contextmanager
+    def in_memory(dataset):
+        dataset.load_in_memory()
+        yield
+        dataset.offload_from_memory()
 
     @staticmethod
     def worker_init_fn(worker_id):
