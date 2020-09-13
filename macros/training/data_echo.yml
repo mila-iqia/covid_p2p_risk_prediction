@@ -4,7 +4,7 @@ data:
 
 training:
   echo:
-    num_echoes: 5
+    num_echoes: 2
     policy: random
     step_on_echo: false
     min_buffer_size: 50
