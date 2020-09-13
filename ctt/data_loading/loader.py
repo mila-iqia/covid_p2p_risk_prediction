@@ -1,13 +1,15 @@
 import pickle
 from addict import Dict
 import os
-from typing import Union
+from typing import Union, List
 from copy import deepcopy
 import zarr
+import gc
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, ConcatDataset
+from torch.utils.data import Dataset, ConcatDataset, IterableDataset
+
 from torch.utils.data.dataloader import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
@@ -91,6 +93,7 @@ class ContactDataset(Dataset):
         mask_current_day_encounters=False,
         transforms=None,
         pre_transforms=None,
+        load_to_memory=False,
     ):
         """
         Parameters
@@ -120,6 +123,8 @@ class ContactDataset(Dataset):
         pre_transforms : callable
             Transform that applies directly from to the data that is read
             from file, and before any further processing
+        load_to_memory : bool
+            Whether to load the dataset to memory or to read from file.
         """
         # Private
         self._num_id_bits = 16
@@ -133,6 +138,7 @@ class ContactDataset(Dataset):
         self.mask_current_day_encounters = mask_current_day_encounters
         self.transforms = transforms
         self.pre_transforms = pre_transforms
+        self.load_to_memory = load_to_memory
         # Prepwork
         self._read_data()
         self._set_input_fields_to_slice_mapping()
@@ -167,7 +173,11 @@ class ContactDataset(Dataset):
             assert os.path.exists(
                 os.path.join(self.path, "train_priors.pkl")
             ), f"Expecting a train_priors.pkl in {self.path}, but found none."
-            self._preloaded = zarr.open(self.zarr_path, "r")
+            zarr_store = zarr.open(self.zarr_path, "r")
+            if self.load_to_memory:
+                self._preloaded["dataset"] = zarr_store["dataset"][:]
+            else:
+                self._preloaded = zarr_store
             with open(self.meta_info_path, "rb") as f:
                 self._meta_info = pickle.load(f)
             # This is an array of shape N3 where N is
@@ -185,6 +195,37 @@ class ContactDataset(Dataset):
             self.DEFAULT_INPUT_FIELD_TO_SLICE_MAPPING
         )
         # This method might grow.
+
+    def load_in_memory(self):
+        if isinstance(self._preloaded, zarr.hierarchy.Group):
+            # Load up
+            preloaded = {
+                "dataset": self._preloaded["dataset"][:],
+                "is_filled": self._preloaded["is_filled"][:],
+            }
+            # noinspection PyAttributeOutsideInit
+            self._preloaded = preloaded
+        else:
+            # Make sure nothin' fishy
+            assert isinstance(self._preloaded, dict)
+            assert isinstance(self._preloaded["dataset"], np.ndarray)
+            assert isinstance(self._preloaded["is_filled"], np.ndarray)
+        return self
+
+    def offload_from_memory(self):
+        if isinstance(self._preloaded, zarr.hierarchy.Group):
+            # Already offloaded
+            pass
+        else:
+            # Replace preloaded with the zarr file
+            assert isinstance(self._preloaded, dict)
+            assert isinstance(self._preloaded["dataset"], np.ndarray)
+            assert isinstance(self._preloaded["is_filled"], np.ndarray)
+            del self._preloaded["dataset"]
+            del self._preloaded["is_filled"]
+            gc.collect()
+            # noinspection PyAttributeOutsideInit
+            self._preloaded = zarr.open(self.zarr_path, "r")
 
     @property
     def num_humans(self):
@@ -661,6 +702,38 @@ class ContactDataset(Dataset):
             self._preloaded.close()
 
 
+class ContactDatastream(IterableDataset):
+    def __init__(
+        self, datasets: List[ContactDataset], shuffle_in_dataset: bool = False
+    ):
+        self.datasets = list(datasets)
+        self.shuffle_in_dataset = shuffle_in_dataset
+
+    def _iter(self):
+        for dataset in self.datasets:
+            # Load to RAM
+            dataset.load_in_memory()
+            if self.shuffle_in_dataset:
+                idxs = np.random.permutation(len(dataset))
+            else:
+                idxs = range(len(dataset))
+            for idx in idxs:
+                yield dataset[idx]
+            # Offload from RAM
+            dataset.offload_from_memory()
+
+    def __iter__(self):
+        return self._iter()
+
+    @staticmethod
+    def worker_init_fn(worker_id):
+        worker_info = torch.utils.data.get_worker_info()
+        num_workers = worker_info.num_workers
+        worker_id = worker_info.id
+        self = worker_info.dataset
+        self.datasets = self.datasets[worker_id::num_workers]
+
+
 class ContactPreprocessor(ContactDataset):
     def __init__(self, **kwargs):
         # noinspection PyTypeChecker
@@ -688,9 +761,12 @@ class ContactPreprocessor(ContactDataset):
         raise NotImplementedError
 
 
-def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_kwargs):
+def get_dataloader(
+    batch_size, shuffle=True, num_workers=1, rng=None, stream=False, **dataset_kwargs
+):
     path = dataset_kwargs.pop("path")
     num_datasets_to_select = dataset_kwargs.pop("num_datasets_to_select", None)
+    worker_init_fn = None
     if isinstance(path, str):
         if not ContactDataset.is_dataset_path(path):
             # This code-path supports the case where path is a directory of zip files.
@@ -721,7 +797,12 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
                         f"Failed to read dataset at location "
                         f"{p} due to exception:\n{str(e)}"
                     )
-            dataset = ConcatDataset(dataset)
+            if stream:
+                dataset = ContactDatastream(dataset, shuffle_in_dataset=shuffle)
+                shuffle = False
+                worker_init_fn = ContactDatastream.worker_init_fn
+            else:
+                dataset = ConcatDataset(dataset)
         else:
             # This codepath supports the case where path points to a zip.
             dataset = ContactDataset(path=path, **dataset_kwargs)
@@ -729,9 +810,15 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
         # This codepath supports the case where path is a list of paths pointing
         # to zips.
         assert all([ContactDataset.is_dataset_path(p) for p in path])
-        dataset = ConcatDataset(
-            [ContactDataset(path=p, **dataset_kwargs) for p in path]
-        )
+        dataset = [ContactDataset(path=p, **dataset_kwargs) for p in path]
+        if stream:
+            dataset = ContactDatastream(dataset, shuffle_in_dataset=shuffle)
+            shuffle = False
+            worker_init_fn = ContactDatastream.worker_init_fn
+        else:
+            dataset = ConcatDataset(
+                [ContactDataset(path=p, **dataset_kwargs) for p in path]
+            )
     else:
         raise TypeError
     dataloader = DataLoader(
@@ -740,5 +827,6 @@ def get_dataloader(batch_size, shuffle=True, num_workers=1, rng=None, **dataset_
         shuffle=shuffle,
         num_workers=num_workers,
         collate_fn=ContactDataset.collate_fn,
+        worker_init_fn=worker_init_fn,
     )
     return dataloader

@@ -1,5 +1,5 @@
 import os
-from collections import defaultdict
+from collections import defaultdict, deque
 from addict import Dict
 from copy import deepcopy
 
@@ -49,6 +49,8 @@ class CTTTrainer(
         self._build_scheduler()
 
     def _build_general(self):
+        self._echo_buffer = deque([], maxlen=self.get("training/echo/buffer_size", 0))
+        self._echo_buffer_rng = np.random.RandomState(self.get("training/echo/seed", 0))
         set_infectiousness_bins(self.get("general/infectiousness_bins", None))
 
     def _build_model(self):
@@ -106,6 +108,24 @@ class CTTTrainer(
             del self.train_loader
             self._build_train_loader()
 
+    def push_to_echo_buffer(self, batch):
+        self._echo_buffer.append(batch)
+        return self
+
+    def fetch_from_echo_buffer(self):
+        # If we don't have enough samples in the buffer, we don't return anything
+        if len(self._echo_buffer) <= self.get("training/echo/min_buffer_size", 0):
+            return None
+        if self.get("training/echo/policy", "random") == "random":
+            idx = self._echo_buffer_rng.randint(len(self._echo_buffer))
+            return self._echo_buffer[idx]
+        else:
+            raise NotImplementedError
+
+    @property
+    def echo_data(self):
+        return self.get("training/echo/num_echoes", 1) > 1
+
     @property
     def device(self):
         return self.get("device", "cuda" if torch.cuda.is_available() else "cpu")
@@ -117,9 +137,10 @@ class CTTTrainer(
         for epoch in self.progress(
             range(self.get("training/num_epochs", ensure_exists=True)), tag="epochs"
         ):
-            self.train_epoch()
-            validation_stats = self.validate_epoch()
-            self.checkpoint()
+            validation_stats = {}
+            for _ in self.train_epoch():
+                validation_stats = self.validate_epoch()
+                self.checkpoint()
             self.log_progress("epochs", **validation_stats)
             self.step_scheduler(epoch)
             self.refresh_loader_if_required()
@@ -128,16 +149,54 @@ class CTTTrainer(
     def train_epoch(self):
         self.clear_moving_averages()
         self.model.train()
+        batch_count = 0
         for model_input in self.progress(self.train_loader, tag="train"):
-            # Evaluate model
-            model_input = to_device(model_input, self.device)
-            model_output = Dict(self.model(model_input))
-            # Compute loss
-            losses = self.loss(model_input, model_output)
-            loss = losses.loss
-            self.optim.zero_grad()
-            loss.backward()
-            self.optim.step()
+            # Push to echo buffer
+            if self.echo_data:
+                self.push_to_echo_buffer(model_input)
+            if self.echo_data:
+                all_losses = []
+                self.optim.zero_grad()
+                # First, train with fresh data
+                model_input = to_device(model_input, self.device)
+                model_output = Dict(self.model(model_input))
+                # Compute loss; this is the loss that will be reported to
+                # the logger.
+                losses = self.loss(model_input, model_output)
+                loss = losses.loss
+                loss.backward()
+                if self.get("training/echo/step_on_echo", False):
+                    self.optim.step()
+                for echo_idx in range(
+                    self.get("training/echo/num_echoes", ensure_exists=True)
+                ):
+                    echoed_model_input = self.fetch_from_echo_buffer()
+                    if echoed_model_input is None:
+                        # This can happen when there are not enough samples in
+                        # the echo buffer.
+                        break
+                    if self.get("training/echo/step_on_echo", False):
+                        self.optim.zero_grad()
+                    echoed_model_input = to_device(echoed_model_input, self.device)
+                    echoed_model_output = Dict(self.model(echoed_model_input))
+                    echoed_losses = self.loss(echoed_model_input, echoed_model_output)
+                    echoed_loss = echoed_losses.loss
+                    echoed_loss.backward()
+                    if self.get("training/echo/step_on_echo", False):
+                        self.optim.step()
+                # If we haven't stepped already, it's time
+                if not self.get("training/echo/step_on_echo", False):
+                    self.optim.step()
+            else:
+                self.optim.zero_grad()
+                # Evaluate model
+                model_input = to_device(model_input, self.device)
+                model_output = Dict(self.model(model_input))
+                # Compute loss
+                losses = self.loss(model_input, model_output)
+                loss = losses.loss
+                loss.backward()
+                self.optim.step()
             # Log to wandb (if required)
             self.log_training_losses(losses)
             self.log_learning_rates()
@@ -148,7 +207,16 @@ class CTTTrainer(
             self.log_progress(
                 "train", loss=self.read_from_cache("moving_loss"),
             )
+            yield_condition = (
+                self.get("training/break_epoch_every") is not None
+                and batch_count > 0
+                and (batch_count % self.get("training/break_epoch_every") == 0)
+            )
+            if yield_condition:
+                yield
+            batch_count += 1
             self.next_step()
+        yield
 
     def validate_epoch(self):
         all_losses_and_metrics = defaultdict(list)
