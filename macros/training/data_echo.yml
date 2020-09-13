@@ -1,3 +1,7 @@
+data:
+  loader_kwargs:
+    stream: true
+
 training:
   echo:
     num_echoes: 5
@@ -6,4 +10,3 @@ training:
     min_buffer_size: 50
     buffer_size: 1000
     seed: 42
-  break_epoch_every: 1000
