@@ -1,0 +1,11 @@
+model:
+  __speedrun__: purge
+  kwargs:
+    block_types: nrrrrn
+    capacity: 128
+    encounter_output_features: 1
+    latent_variable_output_features: 1
+    message_dim: 1
+    num_health_history_features: 28
+    num_health_profile_features: 13
+  name: MomentNet
