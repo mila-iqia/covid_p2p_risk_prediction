@@ -71,7 +71,7 @@ class QuantileLoss(nn.Module):
             target = target[:, :, 0]
         losses = []
         for i, q in enumerate(self.quantiles):
-            errors = target - input[:, i]
+            errors = target - input[:, :, i]
             losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(1))
         # unreduced_loss.shape = BM
         unreduced_loss = torch.sum(torch.cat(losses, dim=-1), dim=-1)
