@@ -55,6 +55,36 @@ class SmoothedBinLoss(nn.Module):
         return loss
 
 
+class QuantileLoss(nn.Module):
+    def __init__(self, quantiles, reduction="mean"):
+        super().__init__()
+        self.quantiles = quantiles
+        self.reduction = reduction
+
+    def forward(self, input, target):
+        # input.shape = BMC
+        # target.shape = BM
+        assert input.dim() == 3
+        assert input.shape[-1] == len(self.quantiles)
+        if target.dim() == 3:
+            assert target.shape[-1] == 1
+            target = target[:, :, 0]
+        losses = []
+        for i, q in enumerate(self.quantiles):
+            errors = target - input[:, i]
+            losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(1))
+        # unreduced_loss.shape = BM
+        unreduced_loss = torch.sum(torch.cat(losses, dim=-1), dim=-1)
+        if self.reduction == "mean":
+            return unreduced_loss.mean()
+        elif self.reduction == "sum":
+            return unreduced_loss.sum()
+        elif self.reduction == "none":
+            return unreduced_loss
+        else:
+            raise ValueError(f"Unknown reduction: {self.reduction}.")
+
+
 class GaussianLogLikLoss(nn.Module):
     def __init__(self, reduction="mean"):
         super(GaussianLogLikLoss, self).__init__()
@@ -94,6 +124,7 @@ class EntityMaskedLoss(nn.Module):
                 nn.BCEWithLogitsLoss,
                 nn.CrossEntropyLoss,
                 SmoothedBinLoss,
+                QuantileLoss,
             ),
         )
 
@@ -142,7 +173,14 @@ class EntityMaskedLoss(nn.Module):
 
 
 class InfectiousnessLoss(nn.Module):
-    def __init__(self, nll_loss_fn="MSELoss", binned=False, spillage=None, gamma=2.0):
+    def __init__(
+        self,
+        nll_loss_fn="MSELoss",
+        binned=False,
+        spillage=None,
+        gamma=2.0,
+        quantiles=None,
+    ):
         super(InfectiousnessLoss, self).__init__()
         if binned:
             if spillage is None:
@@ -154,7 +192,12 @@ class InfectiousnessLoss(nn.Module):
                     )
                 )
         else:
-            loss_fn = getattr(nn, nll_loss_fn, None) or globals()[nll_loss_fn]
+            if quantiles is None:
+                loss_fn = getattr(nn, nll_loss_fn, None) or globals()[nll_loss_fn]
+            else:
+                loss_fn = lambda reduction: QuantileLoss(
+                    quantiles=list(quantiles), reduction=reduction
+                )
             self.masked_loss = EntityMaskedLoss(loss_fn)
 
     def forward(self, model_input, model_output):

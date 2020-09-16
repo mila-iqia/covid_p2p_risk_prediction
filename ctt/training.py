@@ -155,7 +155,6 @@ class CTTTrainer(
             if self.echo_data:
                 self.push_to_echo_buffer(model_input)
             if self.echo_data:
-                all_losses = []
                 self.optim.zero_grad()
                 # First, train with fresh data
                 model_input = to_device(model_input, self.device)
