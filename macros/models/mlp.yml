@@ -9,3 +9,13 @@ model:
     num_health_history_features: 28
     num_health_profile_features: 13
   name: MomentNet
+
+losses:
+  kwargs:
+    contagion:
+      allow_multiple_exposures: true
+      diurnal_exposures: true
+
+metrics:
+  kwargs:
+    diurnal_exposures: true
