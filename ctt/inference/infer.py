@@ -118,13 +118,13 @@ def _profile(num_trials, experiment_directory):
 
     print("Loading data...")
     data_path = (
-        "/Users/nrahaman/Python/ctt/data/payload/sim_v2_people-1000_days-30_init"
-        "-0.003570583805768116_uptake-0.9814107861305532_seed-3098_20200629-230107_"
-        "414875.zip"
+        "/Users/nrahaman/Python/covi-simulator/data/"
+        "sim_v2_people-1000_days-30_init-0.01_uptake-0.43562839326657427"
+        "_seed-3088_20200826-164819_785000"
     )
-    dataset = ContactDataset(path=data_path, preload=True)
+    dataset = ContactDataset(path=data_path)
     human_day_infos = [
-        dataset.read(file_name=dataset._files[k]) for k in range(num_trials)
+        dataset.read(flat_idx=0) for k in range(num_trials)
     ]
 
     engine = InferenceEngine(experiment_directory)

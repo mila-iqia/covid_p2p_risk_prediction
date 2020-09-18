@@ -353,6 +353,32 @@ class MuPlusAlphaSigmaInfectiousness(Transform):
         return output_dict
 
 
+class QuantilePicker(Transform):
+    def __init__(self, quantile_idx=None):
+        """
+        Parameters
+        ----------
+        quantile_idx : int
+            Index of the quantile to pick. If set to None, it will auto-select
+            the central quantile.
+        """
+        self.quantile_idx = quantile_idx
+
+    def inverse_apply(self, output_dict):
+        num_quantiles = output_dict["infectiousness_history"].shape[-1]
+        if self.quantile_idx is None:
+            quantile_idx = num_quantiles // 2
+        else:
+            quantile_idx = self.quantile_idx
+            assert quantile_idx < num_quantiles
+        output_dict["latent_variable"] = output_dict[
+            "infectiousness_history"
+        ] = output_dict["infectiousness_history"][
+            :, :, quantile_idx : (quantile_idx + 1)
+        ]
+        return output_dict
+
+
 class ExposureHistoryToProbaInfected(Transform):
     def __init__(self, proba_infected_mapping):
         proba_infected_mapping = np.asarray(proba_infected_mapping)
