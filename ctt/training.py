@@ -132,6 +132,7 @@ class CTTTrainer(
 
     @register_default_dispatch
     def train(self):
+        self.load_for_finetuning_maybe()
         if self.get("wandb/use", True):
             self.initialize_wandb()
         for epoch in self.progress(
