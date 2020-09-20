@@ -329,6 +329,19 @@ class CTTTrainer(
         self.optim.load_state_dict(info_dict["optim"])
         return self
 
+    def load_for_finetuning_maybe(self, path=None):
+        path = path or self.get("finetune/weight_path", default=None)
+        if path is None:
+            return self
+        assert os.path.exists(path), f"Finetuning weight path ({path}) not found."
+        info_dict = torch.load(path, map_location=self.device)
+        assert isinstance(
+            info_dict, (dict, Dict)
+        ), f"checkpoint must load to a dict-like object, got {type(info_dict)} instead."
+        assert "model" in info_dict
+        self.model.load_state_dict(info_dict["model"])
+        return self
+
     def log_validation_losses_and_metrics(self, losses):
         if self.get("wandb/use", False):
             metrics = {f"validation_{k}": v for k, v in losses.items()}

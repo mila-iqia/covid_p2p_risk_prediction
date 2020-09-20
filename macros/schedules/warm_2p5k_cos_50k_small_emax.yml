@@ -1,0 +1,7 @@
+optim:
+  kwargs:
+    eta_max: 4.0e-05
+    eta_min: 8.0e-06
+    num_steps: 50000
+    num_warmup_steps: 2500
+  name: WarmCosineAdam
