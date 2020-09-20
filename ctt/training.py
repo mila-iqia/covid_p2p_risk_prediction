@@ -341,6 +341,7 @@ class CTTTrainer(
         ), f"checkpoint must load to a dict-like object, got {type(info_dict)} instead."
         assert "model" in info_dict
         self.model.load_state_dict(info_dict["model"])
+        self.print(f"Successfully loaded weights from: {path}")
         return self
 
     def log_validation_losses_and_metrics(self, losses):
