@@ -1,0 +1,4 @@
+data:
+  paths:
+    train: /home/nrahaman/python/covi-simulator/exp/neodr2_genial/train
+    validate: /home/nrahaman/python/covi-simulator/exp/neodr2_genial/val
