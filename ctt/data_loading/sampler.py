@@ -37,7 +37,7 @@ class BinaryRejectionSampler(object):
         # we're only going to return the non-rejected samples, but with a weight of 0.
         if sample_is_rejectable:
             # Sample qualifies for rejection
-            coin = self.rng.rand(0, 1)
+            coin = self.rng.rand()
             if coin < self.rejection_weight:
                 sample["sample_weight"] = torch.tensor([1.0])
                 return sample
