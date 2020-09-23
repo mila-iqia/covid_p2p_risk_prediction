@@ -128,7 +128,13 @@ class EntityMaskedLoss(nn.Module):
             ),
         )
 
-    def forward(self, input, target, mask):
+    def reduce_samples(self, unreduced, sample_weights):
+        if sample_weights is None:
+            return unreduced.mean()
+        else:
+            return (unreduced * sample_weights).mean()
+
+    def forward(self, input, target, mask, sample_weight=None):
         assert input.dim() == 3, "Input should be a BMC tensor."
         assert mask.dim() == 2, "Mask should be a BM tensor."
         if isinstance(self.loss_fn, nn.CrossEntropyLoss):
@@ -216,6 +222,7 @@ class InfectiousnessLoss(nn.Module):
             predicted_infectiousness_history,
             model_input.infectiousness_history,
             model_input["valid_history_mask"],
+            model_input.get("sample_weight", None),
         )
 
 
@@ -236,6 +243,7 @@ class ViralLoadLoss(InfectiousnessLoss):
             predicted_viral_load_history,
             model_input.viral_load_history,
             model_input["valid_history_mask"],
+            model_input.get("sample_weight", None),
         )
 
 
@@ -270,6 +278,7 @@ class ExposureHistoryLoss(nn.Module):
             predicted_exposure_history,
             model_input.exposure_history,
             model_input["valid_history_mask"],
+            model_input.get("sample_weight", None),
         )
 
 

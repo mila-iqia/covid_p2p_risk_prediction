@@ -1,11 +1,12 @@
 import pickle
 from addict import Dict
 import os
-from typing import Union, List
+from typing import Union, List, TYPE_CHECKING
 from copy import deepcopy
 from contextlib import contextmanager
 import zarr
 import gc
+import time
 
 import numpy as np
 import torch
@@ -13,6 +14,8 @@ from torch.utils.data import Dataset, ConcatDataset, IterableDataset
 
 from torch.utils.data.dataloader import DataLoader
 from torch.nn.utils.rnn import pad_sequence
+
+from ctt.data_loading.sampler import BinaryRejectionSampler
 
 
 class InvalidSetSize(Exception):
@@ -705,10 +708,18 @@ class ContactDataset(Dataset):
 
 class ContactDatastream(IterableDataset):
     def __init__(
-        self, datasets: List[ContactDataset], shuffle_in_dataset: bool = False
+        self,
+        datasets: List[ContactDataset],
+        shuffle_in_dataset: bool = False,
+        rejection_sampler: "BinaryRejectionSampler" = None,
+        base_seed: int = None,
     ):
         self.datasets = list(datasets)
         self.shuffle_in_dataset = shuffle_in_dataset
+        self.rejection_sampler = rejection_sampler
+        self.base_seed = base_seed or np.random.randint(0, 1000000)
+        self._seed = base_seed
+        self._epoch_num = None
 
     def _iter(self):
         for dataset in self.datasets:
@@ -718,7 +729,24 @@ class ContactDatastream(IterableDataset):
                 else:
                     idxs = range(len(dataset))
                 for idx in idxs:
-                    yield dataset[idx]
+                    sample = dataset[idx]
+                    if self.rejection_sampler is not None:
+                        sample = self.rejection_sampler(sample)
+                    if sample is None:
+                        continue
+                    else:
+                        yield sample
+
+    def set_epoch(self, epoch):
+        self._epoch_num = epoch
+        return self
+
+    def auto_seed(self, worker_id):
+        # Seed derives from worker-id and the epoch.
+        epoch_num = self._epoch_num or (int(time.time() * 10000000) % 10000000)
+        self._seed = epoch_num * 10000 + worker_id
+        if self.rejection_sampler is not None:
+            self.rejection_sampler.seed(self._seed)
 
     def __iter__(self):
         return self._iter()
@@ -740,6 +768,7 @@ class ContactDatastream(IterableDataset):
         worker_id = worker_info.id
         self = worker_info.dataset
         self.datasets = self.datasets[worker_id::num_workers]
+        self.auto_seed(worker_id)
 
 
 class ContactPreprocessor(ContactDataset):
@@ -769,8 +798,27 @@ class ContactPreprocessor(ContactDataset):
         raise NotImplementedError
 
 
+class EpochCountingDataLoader(DataLoader):
+    def __init__(self, *args, **kwargs):
+        super(EpochCountingDataLoader, self).__init__(*args, **kwargs)
+        self._epoch_count = 0
+
+    def __iter__(self):
+        if hasattr(self.dataset, "set_epoch"):
+            getattr(self.dataset, "set_epoch")(self._epoch_count)
+        rval = super(EpochCountingDataLoader, self).__iter__()
+        self._epoch_count += 1
+        return rval
+
+
 def get_dataloader(
-    batch_size, shuffle=True, num_workers=1, rng=None, stream=False, **dataset_kwargs
+    batch_size,
+    shuffle=True,
+    num_workers=1,
+    rng=None,
+    stream=False,
+    rejection_sampler_kwargs=None,
+    **dataset_kwargs,
 ):
     path = dataset_kwargs.pop("path")
     num_datasets_to_select = dataset_kwargs.pop("num_datasets_to_select", None)
@@ -829,7 +877,10 @@ def get_dataloader(
             )
     else:
         raise TypeError
-    dataloader = DataLoader(
+    if rejection_sampler_kwargs is not None:
+        assert stream, "Rejection sampler is only supported for the streaming dataset."
+        dataset.rejection_sampler = BinaryRejectionSampler(**rejection_sampler_kwargs)
+    dataloader = EpochCountingDataLoader(
         dataset=dataset,
         batch_size=batch_size,
         shuffle=shuffle,
