@@ -51,4 +51,4 @@ class BinaryRejectionSampler(object):
 
 
 def reject_nonzero_infectiousness(sample):
-    return bool(sample["infectiousness_history"].max().gt(0))
+    return not bool(sample["infectiousness_history"].max().gt(0))
