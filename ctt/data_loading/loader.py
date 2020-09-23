@@ -744,7 +744,7 @@ class ContactDatastream(IterableDataset):
     def auto_seed(self, worker_id):
         # Seed derives from worker-id and the epoch.
         epoch_num = self._epoch_num or (int(time.time() * 10000000) % 10000000)
-        self._seed = epoch_num * 10000 + worker_id
+        self._seed = (epoch_num * 10000 + worker_id) % 4294967295
         if self.rejection_sampler is not None:
             self.rejection_sampler.seed(self._seed)
 

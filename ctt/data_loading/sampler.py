@@ -21,7 +21,7 @@ class BinaryRejectionSampler(object):
         # DOUBLE DANGER: Make sure seeds are not only different for every worker,
         # but also for every epoch.
         self.rng = np.random.RandomState(
-            seed or (int(time.time() * 10000000) % 10000000)
+            seed or (int(time.time() * 10000000) % 4294967295)
         )
 
     def seed(self, seed):
