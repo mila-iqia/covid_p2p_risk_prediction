@@ -1,0 +1,7 @@
+data:
+  loader_kwargs:
+    rejection_sampler_kwargs:
+      rejection_criterion: reject_nonzero_infectiousness
+      rejection_weight: 0.5
+  validation_loader_kwargs:
+    rejection_sampler_kwargs: null
