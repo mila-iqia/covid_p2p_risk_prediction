@@ -132,6 +132,14 @@ class EntityMaskedLoss(nn.Module):
         if sample_weights is None:
             return unreduced.mean()
         else:
+            # Broadcast sample_weights to work with all unreduced shapes, as long as
+            # the first axis works
+            assert sample_weights.shape[0] == unreduced.shape[0], (
+                f"Shape of sample weights {sample_weights.shape} "
+                f"incompatible with that of unreduced loss: {unreduced.shape}."
+            )
+            broadcast_shape = [sample_weights.shape[0]] + (unreduced.dim() - 1) * [1]
+            sample_weights = sample_weights.reshape(broadcast_shape)
             return (unreduced * sample_weights).mean()
 
     def forward(self, input, target, mask, sample_weight=None):
@@ -149,9 +157,9 @@ class EntityMaskedLoss(nn.Module):
             loss_elements = self.loss_fn(input, target)
             # Mask out the invalids
             masked_loss_elements = loss_elements * mask
-            reduced_loss = (
-                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
-            ).mean()
+            reduced_loss = self.reduce_samples(
+                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS), sample_weight
+            )
         elif isinstance(self.loss_fn, SmoothedBinLoss):
             # target.shape = BM1 of integers specifying the index of the bin.
             # Squeeze to a BM tensor for downstream.
@@ -164,17 +172,17 @@ class EntityMaskedLoss(nn.Module):
             # loss_elements.shape = BM
             loss_elements = self.loss_fn(input, target).sum(-1)
             masked_loss_elements = loss_elements * mask
-            reduced_loss = (
-                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
-            ).mean()
+            reduced_loss = self.reduce_samples(
+                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS), sample_weight
+            )
         else:
             loss_elements = self.loss_fn(input, target)
             masked_loss_elements = (
                 loss_elements[..., 0] if loss_elements.dim() == 3 else loss_elements
             ) * (mask[..., 0] if mask.dim() == 3 else mask)
-            reduced_loss = (
-                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS)
-            ).mean()
+            reduced_loss = self.reduce_samples(
+                masked_loss_elements.sum(-1) / (mask.sum(-1) + self.EPS), sample_weight,
+            )
         return reduced_loss
 
 
