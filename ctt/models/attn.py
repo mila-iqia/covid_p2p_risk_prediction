@@ -167,6 +167,18 @@ class ResLinearReLU(nn.Module):
         return X
 
 
+class ResDoubleLinearReLU(nn.Module):
+    def __init__(self, dim):
+        super(ResDoubleLinearReLU, self).__init__()
+        self.fc1 = nn.Linear(dim, dim // 2)
+        self.fc2 = nn.Linear(dim // 2, dim)
+
+    def forward(self, X):
+        hidden = F.relu(self.fc1(X))
+        output = F.relu(self.fc2(hidden)) + X
+        return output
+
+
 class LinearReLU(nn.Linear):
     def __init__(self, dim_in, dim_out):
         super(LinearReLU, self).__init__(dim_in, dim_out)

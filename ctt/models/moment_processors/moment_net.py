@@ -119,6 +119,7 @@ class _MomentNet(nn.Module):
 
 class MomentNet(_MomentNet):
     RES_LINEAR_RELU_BLOCK_TYPE = "r"
+    DOUBLE_RES_LINEAR_RELU_BLOCK_TYPE = "d"
     LINEAR_RELU_BLOCK_TYPE = "n"
     LINEAR_BLOCK_TYPE = "l"
 
@@ -172,6 +173,9 @@ class MomentNet(_MomentNet):
             elif block_type == self.RES_LINEAR_RELU_BLOCK_TYPE:
                 assert _in == _out
                 blocks.append(attn.ResLinearReLU(_in))
+            elif block_type == self.DOUBLE_RES_LINEAR_RELU_BLOCK_TYPE:
+                assert _in == _out
+                blocks.append(attn.ResDoubleLinearReLU(_in))
             else:
                 raise ValueError
         # Chain 'em
