@@ -24,14 +24,12 @@ from ctt.utils import (
     momentum_accumulator,
     set_infectiousness_bins,
 )
-from ctt.metrics import Metrics
 from ctt import opts
 from ctt.data_loading.transforms import get_transforms, get_pre_transforms
-from ctt.sim.interface import SimInterfaceMixin
 
 
 class CTTTrainer(
-    TensorboardMixin, WandBSweepMixin, IOMixin, SimInterfaceMixin, BaseExperiment
+    TensorboardMixin, WandBSweepMixin, IOMixin, BaseExperiment
 ):
     WANDB_PROJECT = "ctt"
 
@@ -95,7 +93,6 @@ class CTTTrainer(
         self.loss = WeightedSum.from_config(self.get("losses", ensure_exists=True))
         optim_cls = getattr(opts, self.get("optim/name", "Adam"))
         self.optim = optim_cls(self.model.parameters(), **self.get("optim/kwargs"))
-        self.metrics = Metrics(**self.get("metrics/kwargs", {}))
 
     def _build_scheduler(self):
         # Set up an epoch-wise scheduler here if you want to, but the
@@ -220,14 +217,12 @@ class CTTTrainer(
 
     def validate_epoch(self):
         all_losses_and_metrics = defaultdict(list)
-        self.metrics.reset()
         self.model.eval()
         for model_input in self.progress(self.validate_loader, tag="validation"):
             with torch.no_grad():
                 model_input = to_device(model_input, self.device)
                 model_output = Dict(self.model(model_input))
                 losses = self.loss(model_input, model_output)
-                self.metrics.update(model_input, model_output)
                 all_losses_and_metrics["loss"].append(losses.loss.item())
                 for key in losses.unweighted_losses:
                     all_losses_and_metrics[key].append(
@@ -237,7 +232,6 @@ class CTTTrainer(
         all_losses_and_metrics = Dict(
             {key: np.mean(val) for key, val in all_losses_and_metrics.items()}
         )
-        all_losses_and_metrics.update(Dict(self.metrics.evaluate()))
         self.log_validation_losses_and_metrics(all_losses_and_metrics)
         early_stopping_metric = all_losses_and_metrics[
             self.get("training/checkpoint/early_stopping_metric", "loss")

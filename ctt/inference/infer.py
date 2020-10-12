@@ -112,16 +112,11 @@ class InferenceEngine(BaseExperiment):
             )
 
 
-def _profile(num_trials, experiment_directory):
+def _profile(num_trials, experiment_directory, data_path):
     from ctt.data_loading.loader import ContactDataset
     import time
 
     print("Loading data...")
-    data_path = (
-        "/Users/nrahaman/Python/covi-simulator/data/"
-        "sim_v2_people-1000_days-30_init-0.01_uptake-0.43562839326657427"
-        "_seed-3088_20200826-164819_785000"
-    )
     dataset = ContactDataset(path=data_path)
     human_day_infos = [
         dataset.read(flat_idx=0) for k in range(num_trials)
@@ -141,9 +136,3 @@ def _profile(num_trials, experiment_directory):
     stop = time.time()
 
     print(f"Average time ({num_trials} trials): {(stop - start)/num_trials} s.")
-
-
-if __name__ == "__main__":
-    # _profile(500, "/Users/nrahaman/Python/ctt/tmp/DEBUG-DCTT-MOREXA-0")
-    _profile(1, "/Users/nrahaman/Python/ctt/tmp/TWILIGHT-RAIN-696")
-    # _profile(1000, "/Users/nrahaman/Python/ctt/tmp/WINTER-MOON-285")
