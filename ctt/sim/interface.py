@@ -49,12 +49,12 @@ class SimInterfaceMixin(_SimInterfaceMixin):
         return directory
 
     @property
-    def outgoing_queue(self) -> persistqueue.SQLiteQueue:
+    def outgoing_queue(self) -> persistqueue.SQLiteAckQueue:
         if not hasattr(self, "_sim_interface_out_queue"):
             setattr(
                 self,
                 "_sim_interface_out_queue",
-                persistqueue.SQLiteQueue(
+                persistqueue.SQLiteAckQueue(
                     self.queue_directory,
                     name=su.get_outgoing_queue_name(),
                     auto_commit=True,
@@ -78,15 +78,17 @@ class SimInterfaceMixin(_SimInterfaceMixin):
 
     def send_weights(self):
         # Dump weights
+        iden = uuid.uuid4().hex
         weight_path = os.path.join(
-            self.evaluation_checkpoint_directory, f"{uuid.uuid4().hex}.ckpt"
+            self.evaluation_checkpoint_directory, f"{iden}.ckpt"
         )
-        torch.save(self.model.state_dict(), weight_path)
+        torch.save({"model": self.model.state_dict()}, weight_path)
         # Make payload to dump to the queue
         payload = dict(
             epoch=self.epoch,
             step=self.step,
             experiment_directory=self.experiment_directory,
+            iden=iden,
             time=time.time(),
             weight_path=weight_path,
             simulation_kwargs=self.get("sim/kwargs", {})

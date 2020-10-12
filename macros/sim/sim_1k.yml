@@ -1,0 +1,6 @@
+sim:
+  kwargs:
+    n_people: 100
+    INTERVENTION_DAY: 3
+    init_percent_sick: 0.01
+    APP_UPTAKE: 0.8415

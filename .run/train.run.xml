@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/train.py" />
-    <option name="PARAMETERS" value="$PROJECT_DIR$/tmp/MSN-DEBUG-0 --inherit $PROJECT_DIR$/debug_configs/MSN-X --purge True --config.wandb.use False --config.data.loader_kwargs.mask_current_day_encounters True --config.losses.kwargs.infectiousness.binned True --config.losses.kwargs.infectiousness.spillage 2 --config.losses.kwargs.infectiousness.gamma 1.5 --macro $PROJECT_DIR$/macros/binned_infectiousness.yml" />
+    <option name="PARAMETERS" value="$PROJECT_DIR$/tmp/MSN-DEBUG-0 --inherit $PROJECT_DIR$/debug_configs/MSN-X --purge True --config.wandb.use False --config.data.loader_kwargs.mask_current_day_encounters True --macro $PROJECT_DIR$/macros/losses/gaussian_loglik.yml" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

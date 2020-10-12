@@ -1,0 +1,87 @@
+data:
+  loader_kwargs:
+    batch_size: 512
+    bit_encoded_messages: false
+    clip_history_days: false
+    num_workers: 10
+    preload: true
+    relative_days: true
+    shuffle: true
+    num_datasets_to_select: 10
+  paths:
+    # @Victor: Change these!
+    train: ./data/dr4/train
+    # @Victor: make sure there are not more than 10 files in val
+    validate: ./data/dr4/val
+  transforms:
+    train:
+      kwargs:
+        FractionalEncounterDurationNoise:
+          fractional_noise: 0.01
+        QuantizedGaussianMessageNoise:
+          noise_std: 0.5
+      names:
+      - QuantizedGaussianMessageNoise
+      - FractionalEncounterDurationNoise
+
+model:
+  name: MixSetNet
+  kwargs:
+    capacity: 128
+    dropout: 0.1
+    encounter_duration_embedding_dim: 32
+    encounter_duration_embedding_mode: sines
+    encounter_duration_num_thermo_bins: 32
+    encounter_duration_thermo_range:
+      - 0.0
+      - 6.0
+    encounter_output_features: 1
+    encounter_partner_id_embedding_dim: 32
+    health_history_embedding_dim: 64
+    health_profile_embedding_dim: 32
+    latent_variable_output_features: 1
+    message_dim: 1
+    message_embedding_dim: 128
+    num_encounter_partner_id_bits: 16
+    num_heads: 4
+    num_health_history_features: 28
+    num_health_profile_features: 12
+    block_capacity: 128
+    block_types: rrrsr
+    srb_aggregation: max
+    srb_feature_size_divisor: 1
+    time_embedding_dim: 32
+    use_encounter_partner_id_embedding: false
+    use_learned_time_embedding: true
+
+losses:
+  kwargs:
+    contagion:
+      allow_multiple_exposures: true
+    infectiousness: {}
+  weights:
+    contagion: 0.7
+    infectiousness: 1.0
+
+optim:
+  kwargs:
+    eta_max: 0.0008
+    eta_min: 8.0e-06
+    num_steps: 100000
+    num_warmup_steps: 5000
+    weight_decay: 1.0e-05
+  name: WarmCosineAdam
+
+tensorboard:
+  log_scalars_every: 10
+
+training:
+  checkpoint:
+    every: 2
+    if_best: true
+    early_stopping_metric: infectiousness
+  num_epochs: 80
+
+wandb:
+  log_every: 50
+  use: true
