@@ -1,0 +1,82 @@
+data:
+  loader_kwargs:
+    batch_size: 1024
+    bit_encoded_messages: false
+    clip_history_days: false
+    mask_current_day_encounters: true
+    num_datasets_to_select: null
+    num_workers: 8
+    relative_days: true
+    shuffle: true
+    stream: true
+  paths:
+    train: ./data/train
+    validate: ./data/val
+  validation_loader_kwargs:
+    num_datasets_to_select: null
+losses:
+  kwargs:
+    contagion:
+      allow_multiple_exposures: true
+    infectiousness: {}
+  weights:
+    contagion: 0.7
+    infectiousness: 1.0
+metrics:
+  kwargs:
+    activate: false
+model:
+  kwargs:
+    block_capacity: 128
+    block_types: rrrrr
+    capacity: 128
+    dropout: 0.1
+    encounter_duration_embedding_dim: 32
+    encounter_duration_embedding_mode: sines
+    encounter_duration_num_thermo_bins: 32
+    encounter_duration_thermo_range:
+    - 0.0
+    - 6.0
+    encounter_output_features: 1
+    encounter_partner_id_embedding_dim: 32
+    health_history_embedding_dim: 64
+    health_profile_embedding_dim: 32
+    latent_variable_output_features: 1
+    message_dim: 1
+    message_embedding_dim: 128
+    num_encounter_partner_id_bits: 16
+    num_heads: 4
+    num_health_history_features: 28
+    num_health_profile_features: 13
+    srb_aggregation: max
+    srb_feature_size_divisor: 1
+    time_embedding_dim: 32
+    use_encounter_partner_id_embedding: false
+    use_learned_time_embedding: true
+  name: MixSetNet
+optim:
+  kwargs:
+    eta_max: 4.0e-05
+    eta_min: 8.0e-06
+    num_steps: 50000
+    num_warmup_steps: 2500
+  name: WarmCosineAdam
+tensorboard:
+  log_scalars_every: 10
+training:
+  break_epoch_every: 5000
+  checkpoint:
+    early_stopping_metric: infectiousness
+    every: 2
+    if_best: true
+  echo:
+    buffer_size: 1000
+    min_buffer_size: 50
+    num_echoes: 1
+    policy: random
+    seed: 42
+    step_on_echo: false
+  num_epochs: 10
+wandb:
+  log_every: 50
+  use: true
