@@ -1,3 +1,6 @@
+# DEPRECATED: This repository was used to report early results from the [COVI contact tracing project](https://covicanada.org/). It is no longer maintained. 
+Please see [the current simulator here](https://github.com/mila-iqia/COVI-AgentSim), and/or [the machine learning repo here](https://github.com/mila-iqia/COVI-ML).
+
 # Supervised COVID-19 risk prediction
 
 As part of a project for creating a COVID-19 risk-management app, we have created a supervised learning dataset for predicting individuals' level of risk of infection, as well as their source of infection, from features of individuals (e.g. pre-existing medical conditions) and features of encounters between individuals. The dataset is output by [a city-level simulator](https://github.com/pg2455/covid_p2p_simulation) (a stochastic agent-based model). 
