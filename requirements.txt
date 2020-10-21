@@ -1,12 +1,10 @@
 torch
 numpy
 addict
-git+git://github.com/inferno-pytorch/speedrun.git@p2p_risk_prediction
+git+git://github.com/inferno-pytorch/speedrun.git
 zipfile36
 wandb
-tensorflow==2.1
-tensorflow-addons==0.9.1
-onnx==1.6
 git+git://github.com/onnx/onnx-tensorflow.git@c4fc047e7ec71daa6aa8f71e9cc2ee9e5a3768b6#egg=onnx-tf
 scipy
 pyzmq
+zarr
